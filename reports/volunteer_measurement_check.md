@@ -92,3 +92,15 @@ placebo ratios by date:
 2026-06-01    1.081
 2026-07-01    1.166
 ```
+
+## Sensitivity: how much of the rise is carried by alerts that follow each other closely
+
+Starts per active region-day when a start that comes within G minutes of the end of the region's previous alert counts as part of that alert. The number of (region, day) pairs with a start is not changed.
+```
+                          2025 H1  2025 Q4  Aug-Sep 2026  Aug-Sep 2026 / 2025 H1
+rows as published            3.50     4.42          7.21                    2.06
+merged if gap <= 10 min      3.39     4.22          6.66                    1.96
+merged if gap <= 30 min      3.18     3.84          5.70                    1.79
+merged if gap <= 60 min      2.85     3.31          4.42                    1.55
+merged if gap <= 120 min     2.35     2.54          2.93                    1.25
+```

@@ -52,8 +52,8 @@ from it. What it showed:
   in Donetska and Dnipropetrovska oblasts.
 - **The late-2025 drop is a change in how alerts are recorded, not missing data.** In the official file, oblast-level rows go
   from 10 on 2025-11-04 to 1 on 2025-11-05 while raion-level rows jump (115, 268, 330 on consecutive days) and total rows
-  rise ([figure](reports/fig_daily_counts_by_level.png)). The roll-out was staged: a few oblasts were mostly raion-level already in early 2025, most switched between
-  August and November 2025. A model trained on
+  rise ([figure](reports/fig_daily_counts_by_level.png)). The roll-out was staged: a few oblasts were mostly
+  raion-level already in early 2025, most switched between August and November 2025. A model trained on
   `level == 'oblast'` rows after that date sees a series of about 2 rows a day (59 a day in 2024), so any score on it is
   meaningless, which is why an MAE of 1.26 measured on that period in the summer project said nothing.
 - **The volunteer file is the only current source.** It runs to 2026-10-12 07:49 Kyiv, has no duplicates, no gap of 8 hours
@@ -80,10 +80,42 @@ Full table and figure: [reports/volunteer_measurement_check.md](reports/voluntee
   alert durations is flat (about 1,400-2,100 hours), the median duration of an alert falls from 30-40 to 17 minutes, and
   the share of starts that follow another alert of the same region within 15 minutes rises from 4-6% to 11%. That is the
   pattern of more and shorter alerts covering the same time: either real tactics or a change in how alerts are cut up,
-  and these data cannot tell which.
+  and the next subsection looks at the second possibility.
 - **What follows.** The level of the target drifts upward, so models are compared on validation and then checked on test
   rather than assumed to carry over. Baselines look back at most 28 days and have no training window; for Ridge the
   training window (all history vs after the switch) is a setting chosen on validation.
+
+### Why the drift happens: how the volunteer rows are made
+
+The dataset's own code ([processors/volunteer_etryvoga_processor.py](https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset/blob/main/processors/volunteer_etryvoga_processor.py),
+lines 230-258 and 294-324) shows where an "alert start" comes from. It reads the messages of a public Telegram channel.
+For each message it finds the oblast whose name or town aliases occur in the text (the first match wins) and decides
+whether the message announces or ends an alert. It keeps at most one open alert per oblast: a start message opens it (or
+replaces it), and any end message that names the oblast closes it and writes a row. The code has no idea of raions. When
+alerts are reported per raion, an all-clear for one raion therefore closes the whole oblast's row even if other raions
+are still under alert, and the next raion alert opens a new row. That can cut one long oblast-wide alert into several
+shorter rows, which is the pattern seen in the data. The last change to this code is from 2024-06-01 (checked in the
+repository history), so the parser did not change at the switch; what changed is what it is fed, because alerts are now
+issued per raion.
+
+How much of the rise sits in rows that follow the previous alert of the same region closely? If a start within G minutes
+of the end of the region's previous alert is counted as part of that alert, starts per active region-day become
+(from [reports/volunteer_measurement_check.md](reports/volunteer_measurement_check.md)):
+
+| | 2025 H1 | 2025 Q4 | Aug-Sep 2026 | Aug-Sep 2026 / 2025 H1 |
+|---|---|---|---|---|
+| rows as published | 3.50 | 4.42 | 7.21 | 2.06 |
+| merged if gap <= 10 min | 3.39 | 4.22 | 6.66 | 1.96 |
+| merged if gap <= 30 min | 3.18 | 3.84 | 5.70 | 1.79 |
+| merged if gap <= 60 min | 2.85 | 3.31 | 4.42 | 1.55 |
+| merged if gap <= 120 min | 2.35 | 2.54 | 2.93 | 1.25 |
+
+The rise from H1 2025 to Aug-Sep 2026 shrinks from about 2.1 times to 1.25 times when alerts within two hours of each
+other are merged. That is what splitting would produce. It is also what a real increase in the number of separate waves
+would produce, and the data cannot tell the two apart (the repository has no archive of the raw messages to replay). The
+reading of the code is certain; that it explains the drift is an inference. The target was **not** changed in response:
+it stays the number of alert starts as published, the drift is documented, and the models are judged on the latest
+window as it is.
 
 ## Leakage controls
 
@@ -127,7 +159,8 @@ How to read it:
 - On validation the longer the memory, the better (MAE 20.1 for naive down to 12.4 for 28 days), and Ridge lands second.
 - On test the order reverses. The level rose from 112 to 148 starts a day (monthly means 126 in August, 148 in September,
   158 in the first 11 days of October), and a 28-day average lags a rising series: its bias is -12 starts a day, Ridge's
-  -9, naive's -1.4. The 56-day validation window was flat and could not show this.
+  -9, naive's -1.4. The 56-day validation window was flat and could not show this. Part of the rise is probably an artifact of how the
+  volunteer rows are cut up (see [Why the drift happens](#why-the-drift-happens-how-the-volunteer-rows-are-made)).
 - The best model on test, the 3-day average (16.3 vs 17.0 for naive), was fifth on validation. No significance test was
   run; with 56 days that difference should not be read as a ranking.
 - The weekly pattern is weak (mean starts by weekday: Sunday 63, Thursday 72), which is why the weekly baselines lose.
@@ -160,8 +193,8 @@ Beyond the two unit tests, four checks were run on the committed code; the first
 ## Limitations
 
 - One 56-day test window, during which the level was rising; the conclusions about model ranking are for that window.
-- The volunteer record is unofficial. What an "alert start" means seems to drift over time (see above); real escalation
-  and recording changes cannot be separated with these data.
+- The volunteer record is unofficial, and what an "alert start" counts has drifted over time (see above): the target mixes
+  real alert activity with the way the channel's messages are cut into alerts, and these data cannot separate the two.
 - The official file ends on 2026-09-07, so the latest period exists only in the volunteer file. The two sources agree on
   how many regions have an alert each day, not on the number of alerts.
 - Forecasts are point forecasts for the whole country; no intervals, no per-region models, no text or media data.
@@ -212,8 +245,12 @@ The work was done with an AI assistant, and the full conversation is part of the
    rewritten to show counts with them removed.
 4. **The download failed** with a certificate error from `requests`; the fix was to use the standard library with checks
    still on, not to switch checks off.
-5. **The user's challenge led to a new check.** Rising volunteer counts might be alerts split into more starts, the same
-   trap as in the summer project. The check was written with its decision rule first. It found no jump at the switch and a
-   steady drift, which is documented above instead of being waved away.
-6. **The first honest evaluation was disappointing** (validation winners lose to naive on test). It is reported and
+5. **A doubt about the volunteer counts led to a new check.** Rising counts might mean alerts split into more starts, the
+   same trap as in the summer project. The check was written with its decision rule first. It found no jump at the switch
+   and a steady drift, which is documented above instead of being waved away.
+6. **The cause of the drift was looked up, not guessed.** An independent agent read the dataset's processing code and the
+   key lines were read again directly: the volunteer parser keeps one open alert per oblast and cannot see raions, so it
+   can cut one oblast-wide alert into several rows. This supports the doubt without proving it, and the target was left
+   as chosen.
+7. **The first honest evaluation was disappointing** (validation winners lose to naive on test). It is reported and
    explained, not tuned away.

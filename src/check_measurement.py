@@ -66,7 +66,8 @@ def prepare(ev: pd.DataFrame, last_day: pd.Timestamp) -> pd.DataFrame:
     end_s = (e["finished_at"] - T0).dt.total_seconds()
     # latest end among the region's earlier alerts, over the whole history (does not reset at month ends)
     prev_end = end_s.groupby(e["region"]).transform(lambda s: s.cummax().shift(1))
-    e["rapid"] = ((start_s - prev_end) / 60) <= config.RAPID_RESTART_MIN
+    e["gap_min"] = (start_s - prev_end) / 60  # minutes since the latest end among the region's earlier alerts
+    e["rapid"] = e["gap_min"] <= config.RAPID_RESTART_MIN
     e["duration_min"] = (end_s - start_s) / 60
     return e
 
@@ -116,6 +117,27 @@ def switch_test(e: pd.DataFrame, switch_day: pd.Timestamp) -> dict:
             "rank": n_ge + 1, "of": len(placebo) + 1, "jump": n_ge + 1 <= TOP_K}
 
 
+MERGE_GAPS = (10, 30, 60, 120)
+MERGE_PERIODS = {"2025 H1": ("2025-01-01", "2025-06-30"), "2025 Q4": ("2025-10-01", "2025-12-31"),
+                 "Aug-Sep 2026": ("2026-08-01", "2026-09-30")}
+
+
+def merge_sensitivity(e: pd.DataFrame) -> pd.DataFrame:
+    """Starts per active region-day if a start that comes within G minutes of the end of the region's previous alert
+    is counted as part of that alert. The number of (region, day) pairs with a start is left as it is."""
+    out = {}
+    for name, (a, b) in MERGE_PERIODS.items():
+        w = e.loc[(e["day"] >= pd.Timestamp(a)) & (e["day"] <= pd.Timestamp(b))]
+        region_days = len(w.drop_duplicates(["region", "day"]))
+        col = {"rows as published": len(w) / region_days}
+        for g in MERGE_GAPS:
+            col[f"merged if gap <= {g} min"] = int((~(w["gap_min"] <= g)).sum()) / region_days
+        out[name] = col
+    t = pd.DataFrame(out)
+    t["Aug-Sep 2026 / 2025 H1"] = t["Aug-Sep 2026"] / t["2025 H1"]
+    return t
+
+
 def plot(tab: pd.DataFrame, switch_day: pd.Timestamp, path) -> None:
     x = tab.index.to_timestamp()
     panels = [
@@ -144,6 +166,7 @@ def run(volunteer: Path, official: Path, commit: str) -> dict:
     e = prepare(ev, last_day)
     tab = monthly_table(e, by_level)
     test = switch_test(e, switch_day)
+    sens = merge_sensitivity(e)
 
     config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     tab.to_csv(config.REPORTS_DIR / "volunteer_monthly_diagnostics.csv", encoding="utf-8")
@@ -183,8 +206,12 @@ def run(volunteer: Path, official: Path, commit: str) -> dict:
             f"{'JUMP' if test['jump'] else 'no jump'}.")
     rep.add("placebo ratios by date:")
     rep.table(p.round(3).rename(lambda d: f"{d:%Y-%m-%d}"))
+    rep.add("\n## Sensitivity: how much of the rise is carried by alerts that follow each other closely\n")
+    rep.add("Starts per active region-day when a start that comes within G minutes of the end of the region's previous "
+            "alert counts as part of that alert. The number of (region, day) pairs with a start is not changed.")
+    rep.table(sens.round(2))
     rep.save(config.REPORTS_DIR / "volunteer_measurement_check.md")
-    return {"switch_day": switch_day, "table": tab, "test": test}
+    return {"switch_day": switch_day, "table": tab, "test": test, "sensitivity": sens}
 
 
 def main(argv: list[str] | None = None) -> None:
