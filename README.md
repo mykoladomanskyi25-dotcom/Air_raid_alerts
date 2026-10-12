@@ -64,8 +64,9 @@ from it. What it showed:
 
 ## A measurement question that was checked before modelling
 
-The volunteer file has about 2.5 times more alert starts per month in 2026 than in H1 2025, while the number of regions
-with an alert start per day stays flat at 17-18. That could mean real alerts are being split into several starts after the
+The volunteer file has 2.5 times more alert starts in September 2026 (4,449) than in an average month of H1 2025 (about
+1,800), while the number of regions with an alert start per day stays between 16 and 19 until August 2026 (20-21 in
+the last two months). That could mean real alerts are being split into several starts after the
 switch to raion-level alerting, which would change what the series measures.
 [src/check_measurement.py](src/check_measurement.py) tests it, with the rule written down before the numbers were seen:
 the switch counts as a jump if starts per active region-day over the 90 days after 2025-11-05, divided by the same figure
@@ -145,7 +146,7 @@ training only after the switch). Mean starts per day: validation 111.6, test 148
 | seasonal mean (same weekday, 4 weeks) | 15.6 | 21.9 | 14.8% | -0.29 | -14.2 |
 | moving average, 3 days | 15.2 | 16.3 | 11.0% | +0.04 | -3.1 |
 | moving average, 7 days | 14.9 | 18.7 | 12.6% | -0.10 | -4.7 |
-| moving average, 14 days | 13.6 | 21.9 | 14.8% | -0.29 | -6.7 |
+| moving average, 14 days | 13.6 | 21.9 | 14.7% | -0.29 | -6.7 |
 | **moving average, 28 days (best on validation)** | **12.4** | 20.5 | 13.9% | -0.21 | -12.0 |
 | Ridge (alpha 0.1, all history) | 13.2 | 18.6 | 12.6% | -0.10 | -9.3 |
 
@@ -163,7 +164,7 @@ How to read it:
   volunteer rows are cut up (see [Why the drift happens](#why-the-drift-happens-how-the-volunteer-rows-are-made)).
 - The best model on test, the 3-day average (16.3 vs 17.0 for naive), was fifth on validation. No significance test was
   run; with 56 days that difference should not be read as a ranking.
-- The weekly pattern is weak (mean starts by weekday: Sunday 63, Thursday 72), which is why the weekly baselines lose.
+- The weekly pattern is weak (mean starts by weekday: Sunday 63, Thursday 71), which is why the weekly baselines lose.
 - Forecast for the day after the data ends, 2026-10-12, made with data through 2026-10-11:
   [reports/next_day_forecast_2026-10-12.csv](reports/next_day_forecast_2026-10-12.csv) (naive 189, 28-day average 155,
   Ridge 166). It can be scored once the dataset snapshot of 2026-10-13 is out.
@@ -197,6 +198,8 @@ Beyond the two unit tests, four checks were run on the committed code; the first
   real alert activity with the way the channel's messages are cut into alerts, and these data cannot separate the two.
 - The official file ends on 2026-09-07, so the latest period exists only in the volunteer file. The two sources agree on
   how many regions have an alert each day, not on the number of alerts.
+- Zakarpatska oblast has no alert start after 2026-07-30 while the other 23 regions stay active. A lull and a gap in the
+  volunteer record cannot be told apart in the file; either way the effect on the daily total is at most about 0.5 starts.
 - Forecasts are point forecasts for the whole country; no intervals, no per-region models, no text or media data.
 - Small grids by design (4 moving-average windows, 8 Ridge settings).
 - The availability assumption above.

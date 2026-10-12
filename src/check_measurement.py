@@ -3,8 +3,8 @@
     python -m src.check_measurement            # pinned dataset commit
     python -m src.check_measurement --latest
 
-Why this exists: the volunteer file has about 2.5 times more alert starts per month in 2026 than in
-H1 2025, while the number of regions with an alert start per day stays flat at about 17-18. If one real
+Why this exists: the volunteer file has 2.5 times more alert starts in Sep 2026 than in an average month
+of H1 2025, while the number of regions with an alert start per day stays between 16 and 19 until Aug 2026. If one real
 alert were split into several starts after the official switch to raion-level alerts, starts per active
 region-day would jump at the switch and the series would change meaning.
 
