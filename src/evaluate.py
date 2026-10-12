@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 from . import config, plotting
-from .models import RIDGE_ALPHAS, forecast_all, ridge_walk_forward
+from .models import BASELINES, RIDGE_ALPHAS, forecast_all, predict_next, ridge_predict_next, ridge_walk_forward
 from .split import Split
 
 
@@ -86,6 +86,21 @@ def plot_test(y: pd.Series, forecasts: pd.DataFrame, split: Split, chosen: dict,
                              "one-day-ahead forecasts vs actual")
 
 
+def write_next_day(y: pd.Series, ridge_cfg: dict, chosen: dict, commit: str) -> pd.DataFrame:
+    """Forecast for the day after the last complete day, made at 00:00 of that day. Score it once that day is complete."""
+    day = y.index[-1] + pd.Timedelta(days=1)
+    rows = [{"model": m, "forecast": predict_next(y, m)} for m in BASELINES]
+    rows.append({"model": "ridge", "forecast": ridge_predict_next(y, ridge_cfg["alpha"], ridge_cfg["train_start"])})
+    df = pd.DataFrame(rows)
+    df.insert(0, "forecast_day", f"{day:%Y-%m-%d}")
+    df["forecast"] = df["forecast"].round(2)
+    df["chosen_on_validation"] = df["model"].isin([chosen["best_overall"], chosen["best_ma"], "ridge"])
+    df["data_through"] = f"{y.index[-1]:%Y-%m-%d}"
+    df["dataset_commit"] = commit
+    df.to_csv(config.REPORTS_DIR / f"next_day_forecast_{day:%Y-%m-%d}.csv", index=False, encoding="utf-8")
+    return df
+
+
 def run(y: pd.Series, split: Split, switch_day: pd.Timestamp, commit: str) -> dict:
     forecasts = forecast_all(y)
     grid, ridge_cfg = choose_ridge(y, split, switch_day)  # validation only
@@ -135,4 +150,6 @@ def run(y: pd.Series, split: Split, switch_day: pd.Timestamp, commit: str) -> di
     (config.REPORTS_DIR / "results.md").write_text(text, encoding="utf-8")
     plot_series(y, split, switch_day, config.REPORTS_DIR / "fig_series_and_splits.png")
     plot_test(y, forecasts, split, chosen, config.REPORTS_DIR / "fig_test.png")
-    return {"scores": scores, "table": table, "chosen": chosen, "ridge": ridge_cfg, "forecasts": forecasts}
+    next_day = write_next_day(y, ridge_cfg, chosen, commit)
+    return {"scores": scores, "table": table, "chosen": chosen, "ridge": ridge_cfg, "forecasts": forecasts,
+            "next_day": next_day}
