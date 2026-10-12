@@ -61,9 +61,10 @@ def plot_series(y: pd.Series, split: Split, switch_day: pd.Timestamp, path) -> N
     ax.plot(y.index, y, color=plotting.BLUE, lw=0.6, alpha=0.45, label="alert starts per day")
     ax.plot(y.index, y.rolling(7).mean(), color=plotting.BLUE, lw=1.4, label="7-day mean")
     one = pd.Timedelta(days=1)
-    for idx, name, ha, x in ((split.val, "validation ", "right", split.val[0]),
-                             (split.test, " test", "left", split.test[-1] + one)):
-        ax.axvspan(idx[0], idx[-1] + one, color=plotting.GRID, alpha=0.6, lw=0)
+    for idx, name, ha, x, shade, alpha in (
+            (split.val, "validation ", "right", split.val[0], plotting.GRID, 0.9),
+            (split.test, " test", "left", split.test[-1] + one, plotting.AXIS, 0.5)):
+        ax.axvspan(idx[0], idx[-1] + one, color=shade, alpha=alpha, lw=0)
         ax.text(x, 1.01, name, transform=ax.get_xaxis_transform(), fontsize=8, color=plotting.INK_2, ha=ha)
     ax.axvline(switch_day, color=plotting.INK_2, lw=0.8, ls=(0, (4, 3)))
     ax.text(switch_day, 1.01, f"official switch {switch_day:%Y-%m-%d} ", transform=ax.get_xaxis_transform(),
