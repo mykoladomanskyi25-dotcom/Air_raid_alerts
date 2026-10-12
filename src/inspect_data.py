@@ -364,14 +364,8 @@ def volunteer_check(rep: Report, path, official: pd.DataFrame) -> None:
     rep.table(pd.DataFrame(out))
 
 
-def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Step 1: data verification report")
-    parser.add_argument("--latest", action="store_true",
-                        help="use the newest dataset commit instead of the pinned one")
-    args = parser.parse_args(argv)
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
-    commit, commit_time = resolve_commit(args.latest)
+def run(commit: str, commit_time: str) -> None:
+    """Write the whole Step 1 report for one dataset commit."""
     official = download(config.OFFICIAL_FILE, commit)
     volunteer = download(config.VOLUNTEER_FILE, commit)
     snap = write_snapshot(commit, commit_time, {"official": official, "volunteer": volunteer})
@@ -402,6 +396,15 @@ def main(argv: list[str] | None = None) -> None:
     volunteer_check(rep, volunteer, d)
     rep.save(config.REPORTS_DIR / "data_check.md")
     print(f"\nreport saved to {config.REPORTS_DIR / 'data_check.md'}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Step 1: data verification report")
+    parser.add_argument("--latest", action="store_true",
+                        help="use the newest dataset commit instead of the pinned one")
+    args = parser.parse_args(argv)
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    run(*resolve_commit(args.latest))
 
 
 if __name__ == "__main__":

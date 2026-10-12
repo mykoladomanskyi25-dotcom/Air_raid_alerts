@@ -17,6 +17,14 @@ VOLUNTEER_FILE = "datasets/volunteer_data_en.csv"
 
 TZ = "Europe/Kyiv"
 
+# Regions left out of the target. Luhanska has 1-3 alerts, all in 2022; Crimea is in neither file.
+EXCLUDED_REGIONS = ("Luhanska oblast",)
+
+# Measurement check of the volunteer series (src/check_measurement.py).
+DIAG_FIRST_MONTH = "2024-01"
+SWITCH_WINDOW_DAYS = 90
+RAPID_RESTART_MIN = 15
+
 # Chronological split sizes in days: train < validation < test.
 TEST_DAYS = 56
 VAL_DAYS = 56
