@@ -137,6 +137,26 @@ How to read it:
 
 ![series and split](reports/fig_series_and_splits.png)
 
+## How the results were checked
+
+Beyond the two unit tests, four checks were run on the committed code; the first two are scripts in `checks/`.
+
+- **The tests catch leakage** (`python checks/mutation_check.py`). Ten deliberately wrong versions of the code are injected
+  one at a time into a copy: a moving average without the one-day shift, naive using today, a weekly lag off by one day, a
+  Ridge trained on rows that include the forecast day, a scaler fitted on all rows including the future, a feature taken
+  from tomorrow, alerts assigned to the UTC date instead of the Kyiv date, and the partial last day kept. The two tests
+  fail (or raise an error) for all ten.
+- **Nothing chosen on validation depends on the test window** (`python checks/isolation_check.py`). With the test window
+  overwritten (three times its values plus noise), the validation scores, the Ridge grid, the chosen moving-average window
+  and the chosen Ridge settings are unchanged. Adding 1000 to day D and to every later day changes no forecast for D, for
+  the baselines and for Ridge, at five origins spread over validation and test.
+- **A clean copy reproduces the results.** The committed files were copied to an empty folder, the pinned data was
+  downloaded again and the pipeline was run: every file in `reports/` is identical byte for byte, except the download
+  times in `data_snapshot.json`; the sha256 of both input files is the same.
+- **A second implementation agrees.** The monthly table of the measurement check was recomputed independently with the
+  standard library only (no pandas): every value and the switch test (ratio 1.126161, 7 of 28 placebo ratios at or above
+  it) are the same.
+
 ## Limitations
 
 - One 56-day test window, during which the level was rising; the conclusions about model ranking are for that window.
@@ -174,6 +194,8 @@ src/models.py             step 4: baselines and Ridge, fast and from-scratch ver
 src/evaluate.py           step 5: walk-forward evaluation, choices on validation, next-day forecast
 src/pipeline.py           runs everything
 tests/test_pipeline.py    alert crossing midnight; truncation test
+checks/mutation_check.py  wrong or leaky versions of the code must make the tests fail
+checks/isolation_check.py nothing chosen on validation depends on the test window
 reports/                  committed outputs
 ```
 
