@@ -1,0 +1,2633 @@
+
+> Hi! I'm working on Stage 2 of the KSE Agentic AI School. Deadline: today,
+  Monday 12 October 2026, 23:59 Kyiv time. It is now about 17:40, so I have
+  roughly 5 hours. Keep the scope realistic.
+
+  TASK: a mini pet-project in Python on Time Series Analysis of air raid alerts
+  in Ukraine. AI must be my primary engineering tool. Requirements from the
+  organizers:
+  - Work with the most recent data available and evaluate the solution on the
+  latest period.
+  - No data leakage: nothing the model is trained on or uses as input may come
+  from after the time at which the forecast is made.
+  - Optional (I will skip it unless there is spare time): text/media data
+  (news, Telegram), same no-leakage rule.
+
+  SUBMISSION: (1) GitHub repo with final working Python code, (2) full text
+  export of this AI conversation, (3) ~100-word reflection: what went wrong,
+  how I adjusted my approach, why the final version is better than the first
+  attempt. The organizers evaluate the process: they want to see me iterate,
+  challenge model hallucinations and correct errors, not blindly accept the
+  first output.
+
+  CONTEXT: I did the same topic in the summer AI school. The organizer
+  confirmed I may use that project as a base, but the problem statement has
+  changed significantly. What I did in summer (from my notes, NOT verified for
+  the new task):
+  - Dataset: Vadimkin/ukrainian-air-raid-sirens-dataset on GitHub, columns
+  oblast, level, started_at, finished_at, source.
+  - Filtered level == 'oblast', converted UTC to Europe/Kyiv, built daily alarm
+  counts.
+  - Three baselines: naive (t-1), 7-day rolling mean with shift(1), weekly
+  seasonal naive (t-7). Best MAE 14.28 on a 60-day test (about 31% of the
+  mean), so the series is hard to predict.
+  - I clipped data at 2025-08-31 because daily counts collapsed after about Nov
+  2025, which I believed was a data-collection artifact.
+  - In summer the AI wrote code on column names that did not exist and I got a
+  fake MAE of 1.26 from testing on the collapsed period. I do not want a repeat
+  of that.
+
+  ENVIRONMENT: Windows, PowerShell, VS Code, Python 3.12.10, pandas 3.0.6,
+  numpy, scikit-learn, matplotlib installed. Project folder:
+  C:\Users\Kolya\projects\AI_Agentic_School_Domanskyi (empty git repo, folders
+  data/, src/, notebooks/ created).
+
+  WHAT I WANT NOW (plan mode, do not write code yet):
+  1. Do not assume anything from my summer notes. Your plan must start with a
+  data verification step: download the latest dataset, show df.columns,
+  df.head(), the first and last dates, and daily/monthly alarm counts for the
+  last 6-12 months, so I can check myself whether the late-2025 collapse still
+  exists and where the data really ends. Any cutoff must be decided from this
+  output, not from my notes.
+  2. Define the forecasting setup explicitly: what exactly is predicted
+  (target, horizon), at what moment the forecast is made, and which inputs are
+  allowed. Explain how each step avoids leakage.
+  3. Propose a minimal plan: load and clean, time-based train/test split with
+  the test set being the latest period, baselines, evaluation, README. Keep it
+  small enough to finish today. Flag any step where you are making an
+  assumption I should verify.
+  4. Keep everything reproducible: scripts in src/, one command to run the
+  pipeline, data/ is gitignored.
+
+  Please write the plan, then wait for my feedback before anything is executed.
+
+● Let me check the empty project and the current state of the dataset with
+  read-only lookups first, so the plan doesn't rest on my memory any more than
+  on your summer notes.
+
+  Searched for 1 pattern, read 1 file (ctrl+o to expand)
+
+● The repo only has a .gitignore that already excludes data/, .venv/, and
+  __pycache__/. Next, I'll do some read-only checks: the dataset README, recent
+  commits, file list, and local Python setup.
+
+● Fetch(https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset)
+  ⎿  Received 265.7KB (200 OK)
+
+● Fetch(https://api.github.com/repos/Vadimkin/ukrainian-air-raid-sirens-dataset/
+       commits?per_page=15)
+  ⎿  Received 55.9KB (200 OK)
+
+● Fetch(https://api.github.com/repos/Vadimkin/ukrainian-air-raid-sirens-dataset/
+       contents/datasets)
+  ⎿  Received 5KB (200 OK)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The dataset updates daily (last commit 2026-10-12 05:05 UTC), and I haven't
+  confirmed whether a source column exists; locally I'm missing pytest, pyarrow,
+  statsmodels, the gh CLI, and a git remote. Next I'll look at the column
+  definitions.
+
+● Fetch(https://raw.githubusercontent.com/Vadimkin/ukrainian-air-raid-sirens-dat
+       aset/main/datasets/README.md)
+  ⎿  Received 1.7KB (200 OK)
+
+● Web Search("Україна повітряна тривога оголошується по громадах районах замість
+            області 2025 зміни система оповіщення")
+  ⎿  Did 1 search in 6s
+
+● The README and news reports indicate alerts switched from oblast- to
+  raion-level on Dec 15, 2025, which likely explains the late-2025 "collapse"
+  rather than a data artifact—I'll treat this as a hypothesis to confirm in Step
+  1 while I write up the plan.
+
+● Updated plan
+  ⎿  /plan to preview
+
+● I've written the plan; nothing has been run or written in the project yet. The
+  read-only checks I did before planning changed several things your summer
+  notes assumed:
+
+  - The data is current. The dataset repo gets a new commit every day; the
+    latest is from 05:05 UTC today. The last complete Kyiv day is probably
+    2026-10-11, and Step 1 will confirm it.
+  - The "collapse" is probably not an artifact. The dataset's README says that
+    since December 2025 most official alerts are issued at raion level instead
+    of oblast level. News reports say raion-level alerts went nationwide on 15
+    Dec 2025, after a pilot in 13 regions. If that holds:
+    - filtering level == 'oblast' drops most alerts after Dec 2025;
+    - the 2025-08-31 clip throws away the 13 most recent months, which breaks
+      the "most recent data" requirement.
+
+    I only have the README as a summary from the fetch tool, not word for word.
+    So Step 1 is a gate: it prints monthly counts by level and the month each
+    oblast switched, and you decide the cutoff from that output.
+  - Your notes don't match the files. None of the dataset files is obviously the
+    one with the source column your notes mention. Step 1 prints the real
+    columns before any code depends on them.
+
+  The main proposal is to stop counting alerts and forecast daily alert-hours
+  instead. For each day, an oblast counts as under alert whenever any alert of
+  any level is active anywhere in it. That should stay comparable across the
+  switch from oblast to raion alerts. The forecast is made at 00:00 Kyiv for the
+  whole day ahead, using only complete days before it. The test set is the last
+  8 weeks, and every choice of window, model or setting is made on the 8 weeks
+  before that.
+
+  The plan file also covers:
+  - a leakage table for each step, plus a test that recomputes each forecast
+    with all data from the forecast day onward cut off and checks it doesn't
+    change;
+  - the pandas 3 mistakes I might make out of habit;
+  - a timeline with an hour of buffer before 23:59.
+
+  Four decisions are yours: D1 (cutoff and cleaning rules, at the Step 1 gate),
+  D2 (the target), D3 (assume a real-time alert feed, because the dataset itself
+  is published the next morning) and D4 (56 vs. 60 test days).
+
+  Sources:
+  - Dataset repo
+    (https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset),
+    datasets/README.md (https://github.com/Vadimkin/ukrainian-air-raid-sirens-da
+    taset/blob/main/datasets/README.md)
+  - Slovo i Dilo, 15.12.2025
+    (https://www.slovoidilo.ua/2025/12/15/novyna/suspilstvo/po-vsij-krayini-zapr
+    acyuye-porajonne-oholoshennya-povitryanyx-tryvoh-detali)
+  - Militarnyi (https://militarnyi.com/uk/news/kabmin-ogolosyv-novu-systemu-spov
+    ishhennya-pro-povitryani-tryvogy-po-vsij-ukrayini/)
+  - Espreso
+    (https://espreso.tv/viyna-z-rosiyeyu-ukraina-pereyshla-na-novu-sistemu-ogolo
+    shennya-povitryanikh-trivog-porayonni-opovishchennya-zamist-oblasnikh)
+
+● User approved Claude's plan
+  ⎿  Plan saved to:
+     ~\.claude\plans\pasted-content-id-89c9-hi-i-m-shimmying-crown.md · /plan to
+     edit
+     Plan: Air-raid alert forecasting, Stage 2 (KSE Agentic AI School)
+
+     Context
+
+     Stage 2 asks for a forecast of Ukrainian air-raid alerts that uses the most
+     recent data, is evaluated on the latest period and has no data leakage.
+     Deadline is today, 23:59 Kyiv, about 5 hours away. The summer project is
+     the base, but its notes are treated as hypotheses. It clipped data at
+     2025-08-31 because daily level == 'oblast' counts "collapsed" after about
+     Nov 2025. Earlier it reported a fake MAE of 1.26 from testing on that
+     collapsed period.
+
+     This plan starts with a data-verification gate where you make the
+     decisions. It then builds the smallest honest pipeline:
+     - a target that stays comparable across the late-2025 change,
+     - a chronological split with the latest 8 weeks as the test set,
+     - baselines and one simple model,
+     - automated leakage tests,
+     - a README.
+
+     The repo is empty apart from .gitignore, so there is no code to reuse. The
+     summer code is not here and is not reused.
+
+     What I checked before planning (read-only; please double-check)
+
+     - The dataset is updated daily. The latest commit is
+       d10c80fa696bab42822b9f05b423fc8a30e79d20 at 2026-10-12 05:05 UTC ("Add
+       new data"), and commits arrive every day around 05:00 UTC.
+       - So the snapshot covers alerts up to about 08:00 Kyiv on Oct 12. The
+         last complete Kyiv day is probably 2026-10-11. [VERIFY in Step 1]
+     - datasets/ contains five files: official_data_en.csv (31 MB),
+       official_data_uk.csv, volunteer_data_en.csv (8.9 MB),
+       volunteer_data_uk.csv, README.md.
+       - None of these files is obviously the one with a source column from your
+         summer notes. [VERIFY]
+     - datasets/README.md: the fetch tool returned only a summary, not verbatim
+       text, so treat these as hints. Please open the README yourself.
+       - Times are in UTC. Official data starts 2022-03-15.
+       - "Since December 2025, most official alerts are issued at the raion
+         level rather than the oblast level."
+       - Luhansk oblast and Crimea have permanent sirens that are not in the
+         data.
+     - News: raion-level alerting went nationwide on 15 Dec 2025 (except Donetsk
+       and Luhansk), after a pilot in 13 regions. Sources are at the bottom.
+     - Hypothesis H1: the "collapse" is a change in how alerts are issued, not a
+       data-collection artifact.
+       - If H1 holds, level=='oblast' filtering throws away most alerts after
+         Dec 2025.
+       - Clipping at 2025-08-31 would also throw away the 13 most recent months.
+       - Step 1 must confirm or refute H1.
+     - Local environment: Python 3.12.10, pandas 3.0.6, numpy 2.5.4,
+       scikit-learn 1.9.1, matplotlib 3.11.2, requests 2.34.2, tzdata 2026.5.
+       - Europe/Kyiv resolves, and DST still applies in 2026.
+       - Not installed: pytest, statsmodels, pyarrow. The plan uses only
+         installed packages, and tests run with stdlib unittest.
+       - There is no git remote and no gh CLI. HEAD is master.
+
+     Decisions for you
+
+     - D1 (at the Step 1 gate): cutoff, regime-change date, and data-quality
+       rules (null finished_at, extreme durations, duplicates, excluded
+       regions).
+     - D2 (now or at the gate): the target.
+       - I recommend daily alert-hours from the union of intervals across all
+         alert levels (details below).
+       - The alternative is to keep counts and model only the period after the
+         change.
+     - D3: accept the assumption that the alert feed is available in real time
+       at the forecast moment (see the leakage table).
+     - D4: test length. I recommend 56 days, which is 8 full weeks so each
+       weekday appears 8 times. The summer project used 60.
+
+     Step 0: Scaffold (~5 min)
+
+     - src/__init__.py.
+     - src/config.py: pinned dataset commit SHA and its timestamp, URLs, paths,
+       TZ="Europe/Kyiv", split sizes, excluded regions.
+     - requirements.txt pinned to the versions above.
+     - reports/ for committed outputs.
+     - .gitignore already covers data/, .venv/ and __pycache__/.
+
+     Step 1: Data verification (the gate: you decide, ~25 min including your
+     review)
+
+     python -m src.inspect_data downloads official_data_en.csv at the pinned
+     commit into data/raw/<sha>/. It writes the sha256 and download time to
+     reports/data_snapshot.json. It prints the report and also saves it to
+     reports/data_check.md, with figures in reports/. All files are written with
+     encoding="utf-8".
+
+     The report covers:
+     1. Raw view
+        - df.columns, df.dtypes, df.head(), df.tail().
+        - Three raw started_at strings, to see the timezone suffix before
+          parsing.
+        - Null counts per column, split by level.
+     2. Coverage
+        - First and last started_at and finished_at, in UTC and in Kyiv time.
+        - Number of rows with null finished_at.
+        - Duration stats, the number of durations ≤ 0, and the 10 longest
+          alerts.
+        - Exact duplicate rows.
+     3. Values
+        - level value counts.
+        - Every unique oblast name with the date it was first and last seen.
+          This catches renames, the Luhansk/Crimea entries and how Kyiv city is
+          named.
+     4. Collapse test
+        - Monthly row counts by level for the last 18 months, as a table.
+        - Daily counts by level for the last 12 months, as a PNG.
+        - Daily counts for the last 60 days, as a table, plus the full daily
+          CSV.
+        - For each oblast, the first month in which raion- and hromada-level
+          rows are ≥ 50% of its rows (pilot regions vs. the 15 Dec rollout).
+     5. Tail completeness
+        - Counts for each of the last 7 days vs. the median of the previous 28
+          days, to determine the last complete day.
+     6. Volunteer file: date range and monthly counts for the last 12 months.
+        This is a cross-check only; the README wording suggests collection may
+        have stopped.
+
+     Decision table for after you read the output:
+
+     ┌────────────────────────────────┬────────────────────────────────────────┐
+     │            Evidence            │                Decision                │
+     ├────────────────────────────────┼────────────────────────────────────────┤
+     │ Oblast-level rows fall while   │ H1 confirmed: no cutoff, use           │
+     │ raion-level rows rise, and     │ everything up to the last complete     │
+     │ total coverage is stable       │ day, use a level-independent target    │
+     ├────────────────────────────────┼────────────────────────────────────────┤
+     │ All levels fall together, or   │ Real data gap: cut at the last         │
+     │ there are days with no rows at │ reliable day and document that "latest │
+     │  all                           │  reliable" ≠ "latest"                  │
+     ├────────────────────────────────┼────────────────────────────────────────┤
+     │ The data ends before           │ The test ends at the actual last       │
+     │ 2026-10-11                     │ complete day                           │
+     └────────────────────────────────┴────────────────────────────────────────┘
+
+     Data-quality rules are fixed at this gate, before any model runs, and are
+     applied the same way to every split.
+
+     Forecasting setup
+
+     Item: Time unit
+     Definition: Calendar day D in Europe/Kyiv, DST-aware (2026-03-29 has 23 h)
+     ────────────────────────────────────────
+     Item: Target y_D
+     Definition: Mean, over a fixed set of regions, of the hours of day D during
+
+     which at least one official alert of any level (oblast/raion/hromada) was
+     active somewhere in that oblast. Overlapping intervals are merged first.
+     The
+     set is every region in the data except Luhansk and Crimea/Sevastopol (exact
+
+     list from Step 1). Range 0–24.
+     ────────────────────────────────────────
+     Item: Forecast moment (origin)
+     Definition: 00:00 Kyiv on day D, i.e. the moment day D−1 closes
+     ────────────────────────────────────────
+     Item: Horizon
+     Definition: 1 day (all of day D). Evaluated one step ahead, walk-forward
+     ────────────────────────────────────────
+     Item: Allowed inputs
+     Definition: y and per-oblast hours for days ≤ D−1; calendar facts about D
+     (weekday), which are known in advance
+     ────────────────────────────────────────
+     Item: Forbidden
+     Definition: Any record, or part of a record, at or after D 00:00;
+     statistics
+     fitted on validation or test data; any tuning on the test period
+
+     Why this target (D2):
+     - After Dec 2025, one oblast-wide alert became several raion alerts.
+       Counting level=='oblast' rows therefore collapses, and counting all
+       levels inflates. Neither count is comparable across the change.
+     - "Any part of the oblast is under alert" is the closest match to the old
+       oblast-wide alert, so the series should stay roughly comparable.
+     - Step 2 checks this with a plot around Dec 2025.
+     - If a large jump remains anyway, the model trains only on data after the
+       change. That choice is made on validation, not on test.
+
+     Leakage controls, step by step
+
+     Step: 1 Verify
+     Risk: Choosing the cutoff or cleaning rules after seeing model scores
+     Control: Rules are fixed at the gate, before any model runs
+     ────────────────────────────────────────
+     Step: 2 Target
+     Risk: Giving an alert's whole duration to its start day: an alert from
+     23:00 to
+     02:00 would put 2 h of day D into day D−1
+     Control: Intervals are split at Kyiv midnights; covered by a unit test
+     ────────────────────────────────────────
+     Step: 2 Target
+     Risk: The snapshot contains about 8 h of 2026-10-12, and the last day may
+     be
+     partial
+     Control: Only days up to the last complete day are kept; the forecast for
+     Oct
+     12 uses only data before Oct 12 00:00
+     ────────────────────────────────────────
+     Step: 2 Target
+     Risk: Filling gaps by interpolation, which uses future values
+     Control: No interpolation. Gaps are flagged, not filled. A day with
+     national y
+     = 0 is implausible and fails the run
+     ────────────────────────────────────────
+     Step: 3 Split
+     Risk: Random or shuffled split
+     Control: Chronological train < validation < test, asserted in code
+     ────────────────────────────────────────
+     Step: 4 Baselines
+     Risk: Rolling mean that includes day D
+     Control: shift(1) is applied before every rolling or lag. Truncation test:
+     predictions for D computed on the full data must equal predictions computed
+
+     on data cut at D 00:00
+     ────────────────────────────────────────
+     Step: 5 Model
+     Risk: Features that include day D; scaler fitted on all data; tuning on
+     test
+     Control: Features use shift(1); the scaler sits inside an sklearn Pipeline
+     and
+     is refit on training rows at each origin; the grid is chosen on validation
+     only
+     ────────────────────────────────────────
+     Step: 6 Eval
+     Risk: Picking the best model on test and reporting its score as if it was
+     chosen in advance
+     Control: The model is chosen on validation and recorded before the test is
+     scored; all models are reported on test
+     ────────────────────────────────────────
+     Step: All
+     Risk: The dataset is published with a lag (commits around 05:00 UTC the
+     next
+     day)
+     Control: Assumption D3: the official channel or app gives a real-time feed
+     at
+     the origin. Documented in the README
+
+     Steps 2–7
+
+     2. Target (src/target.py, ~40 min)
+        - Load the CSV and check the required columns. Missing columns fail with
+          a clear message, which guards against the summer's invented column
+          names.
+        - Parse timestamps with utc=True, format="ISO8601" and apply the Step 1
+          rules.
+        - For each oblast, merge overlapping intervals (sort, then a running
+          maximum of end times), then split them at Kyiv midnights.
+        - Build an oblast × day table of hours, with 0 where there is no record.
+          Take the national mean as y_D, and trim to the last complete day.
+        - Outputs: data/processed/daily.csv and reports/fig_target.png, showing
+          the full history, shaded splits and a line at the regime change.
+     3. Split
+        - Test is the last 56 days, expected to be 2026-08-17 to 2026-10-11
+          (Mon–Sun).
+        - Validation is the 56 days before that: 2026-06-22 to 2026-08-16.
+        - Train is everything earlier.
+        - These dates are computed from the data, not hardcoded.
+     4. Baselines (src/models.py)
+        - Naive: y_{D−1}.
+        - Weekly seasonal naive: y_{D−7}.
+        - Moving average of the last k days, with k ∈ {3, 7, 14, 28} chosen on
+          validation.
+     5. One model
+        - StandardScaler + Ridge on lags 1–7 and 14, shifted rolling means over
+          7 and 28 days, and a one-hot weekday.
+        - On validation, choose alpha ∈ {0.1, 1, 10, 100} and the training
+          window: all history, or only data after the change.
+        - Walk-forward: refit at every origin, which is cheap for Ridge.
+        - Also produce a real next-day forecast for 2026-10-12 in
+          reports/next_day_forecast.csv. It can be scored once tomorrow's commit
+          lands.
+     6. Evaluation
+        - Metrics: MAE (primary), RMSE, MAE as % of the test mean, and skill = 1
+          − MAE / MAE of the naive baseline.
+        - Report validation and test tables in reports/results.csv, plus
+          reports/fig_test.png.
+        - 56 days is a small sample, so small differences are not meaningful.
+          Results are reported honestly, even if nothing beats the baselines.
+     7. Tests, README and submission (~45 min)
+        - tests/test_pipeline.py with unittest:
+          - synthetic interval cases: an alert crossing midnight, overlapping
+            raion alerts not counted twice, a DST day of 23 h;
+          - the truncation test;
+          - the split order;
+          - the no-zero-day guard.
+        - README sections: question, data and pinned commit, what changed vs.
+          summer (the H1 evidence), setup, leakage table, results, limitations,
+          how to run, iteration log, and your ~100-word reflection.
+        - You create an empty GitHub repo. I commit after each step and push
+          only with your OK.
+
+     Files: src/{config,data,inspect_data,target,models,evaluate,pipeline}.py,
+     tests/test_pipeline.py, requirements.txt, README.md, reports/* (committed).
+     notebooks/ stays unused.
+     One command: python -m src.pipeline reuses the cached download; --latest
+     fetches the newest commit instead of the pinned one.
+     Tests: python -m unittest discover -s tests.
+
+     Assumptions to verify (consolidated)
+
+     1. Columns and values. I have them only from a summary, not from the file:
+        oblast, raion, hromada, level, started_at, finished_at, with level ∈
+        {oblast, raion, hromada}.
+        - Your source column does not appear in any file I saw.
+        - If oblast is empty on raion-level rows, we need a raion → oblast
+          mapping, which adds about 30 min.
+     2. Timezone. Timestamps are UTC; checked on the raw strings in Step 1.
+     3. H1. The change happened in Dec 2025, with an earlier pilot. Each oblast
+        may have switched in a different month.
+     4. Excluded regions. Luhansk and Crimea are not in the data; the exact
+        names are checked in Step 1.
+     5. Last complete day is 2026-10-11.
+     6. Comparable target. The union target is roughly comparable across the
+        change. Checked with the Step 2 plot; the fallback is training only on
+        data after the change.
+     7. Real-time feed. Assumption D3.
+     8. pandas 3 pitfalls that an AI (me included) may write out of old habit:
+        - In resample and date_range, use 'MS'/'ME' and 'h', not 'M' and 'H'.
+          to_period('M') is still fine.
+        - Copy-on-Write breaks chained assignment, so use .loc.
+        - Parsed datetimes may come out as datetime64[us], so never use
+          astype('int64') for arithmetic; use .dt.total_seconds().
+        - I'm not fully sure which old aliases raise and which only warn in
+          3.0.6. The code uses only the new forms, and Step 1 prints the dtypes.
+     9. Conversation export. /export works in the CLI. In the VS Code extension
+        it needs checking; the fallback is the session JSONL under
+        C:\Users\Kolya\.claude\projects\.
+
+     Timeline (Kyiv time)
+
+     ┌─────────────┬───────────────────────────────────────┐
+     │    Time     │                 Done                  │
+     ├─────────────┼───────────────────────────────────────┤
+     │ ~18:00      │ Plan approved                         │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 18:30       │ Step 1 output reviewed, D1 decided    │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 19:15       │ Target built and plotted              │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 20:00       │ Split, baselines and evaluation       │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 20:45       │ Ridge and next-day forecast           │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 21:30       │ Tests and README                      │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 22:00–23:00 │ Push, conversation export, reflection │
+     ├─────────────┼───────────────────────────────────────┤
+     │ 23:00–23:59 │ Buffer                                │
+     └─────────────┴───────────────────────────────────────┘
+
+     Out of scope unless time remains:
+     - text/Telegram data;
+     - per-oblast models;
+     - an "evening alert-hours 18:00–24:00 of D−1" feature (known at the origin,
+       and probably the strongest signal);
+     - an h = 2 variant that removes the D3 assumption;
+     - bootstrap confidence intervals for MAE differences.
+
+     Verification (end to end)
+
+     - python -m unittest discover -s tests passes.
+     - After deleting data/, python -m src.pipeline re-downloads the pinned
+       commit and gets the same input sha256. It then reproduces
+       reports/results.csv exactly.
+     - Manual spot check: pick one oblast-day, list its raw intervals, compute
+       the union by hand, and compare with daily.csv.
+     - Search the code for old pandas idioms ('M'/'H' aliases, chained
+       assignment).
+     - You review the Step 1 report and make every cutoff decision from it.
+
+     Sources
+
+     - Dataset repo
+       (https://github.com/Vadimkin/ukrainian-air-raid-sirens-dataset) ·
+       datasets/README.md (https://github.com/Vadimkin/ukrainian-air-raid-sirens
+       -dataset/blob/main/datasets/README.md)
+     - Slovo i Dilo, 15.12.2025: raion-level alerts nationwide
+       (https://www.slovoidilo.ua/2025/12/15/novyna/suspilstvo/po-vsij-krayini-z
+       apracyuye-porajonne-oholoshennya-povitryanyx-tryvoh-detali)
+     - Militarnyi: Cabinet announces raion-level alert system
+       (https://militarnyi.com/uk/news/kabmin-ogolosyv-novu-systemu-spovishhenny
+       a-pro-povitryani-tryvogy-po-vsij-ukrayini/)
+     - Espreso: raion-level alerts instead of oblast-level
+       (https://espreso.tv/viyna-z-rosiyeyu-ukraina-pereyshla-na-novu-sistemu-og
+       oloshennya-povitryanikh-trivog-porayonni-opovishchennya-zamist-oblasnikh)
+
+● I'll run Step 0 (scaffold) and Step 1 (data check), then pause at the gate for
+  your D1 decision based on the actual output—loading the chart-guidance skill
+  since Step 1 includes a diagnostic chart.
+
+● Skill(dataviz)
+  ⎿  Successfully loaded skill
+
+● Write(src\__init__.py)
+  ⎿  Wrote 1 line to src\__init__.py
+      1 """Air-raid alert forecasting pipeline (KSE Agentic AI School, St
+        age 2)."""
+
+● Write(src\config.py)
+  ⎿  Wrote 22 lines to src\config.py
+       1 """Project configuration: data source, paths, time zone, split s
+         izes."""
+       2 from pathlib import Path
+       4 ROOT = Path(__file__).resolve().parents[1]
+       5 DATA_DIR = ROOT / "data"
+       6 RAW_DIR = DATA_DIR / "raw"
+       7 PROCESSED_DIR = DATA_DIR / "processed"
+       9
+      10 # Source dataset, pinned to one commit so every run sees identic
+         al input.
+     … +14 lines (ctrl+o to expand)
+
+● Write(src\data.py)
+  ⎿  Wrote 75 lines to src\data.py
+       1 """Download the alert dataset at a pinned commit and load it."""
+       2 from __future__ import annotations
+       3
+       4 import hashlib
+       5 import json
+       6 from datetime import datetime, timezone
+       7 from pathlib import Path
+       8
+       9 import pandas as pd
+      10 import requests
+     … +77 lines (ctrl+o to expand)
+
+● Write(requirements.txt)
+  ⎿  Wrote 6 lines to requirements.txt
+      1 pandas==3.0.6
+      2 numpy==2.5.4
+      3 scikit-learn==1.9.1
+      4 matplotlib==3.11.2
+      5 requests==2.34.2
+      6 tzdata==2026.5
+
+> The plan is good, I accept it with these changes:
+  1. H1 is only a hypothesis. Run Step 0 and Step 1, then stop and show me the
+  report. I decide the cutoff and the target after reading it, not before.
+  2. Scope. Must-have: Step 1, target, split, baselines, evaluation, README
+  with the leakage table. Nice-to-have: Ridge, next-day forecast, extra tests.
+  Keep only two tests: alert crossing midnight and the truncation test. If
+  baselines and evaluation are not done by 20:30, we skip Ridge.
+  3. The zero-day guard should warn and list the days in the report, not crash
+  the run.
+  4. If oblast is empty on raion-level rows, stop and tell me before building
+  any mapping.
+  5. D3: accepted, document it in the README. D4: 56 days is fine.
+  6. In the README, explain the alert-hours target, walk-forward evaluation and
+  the truncation test in 2-3 plain sentences each. I have to defend this in an
+  interview.
+
+● I've logged these adjustments: pausing after Step 1 for your decision on
+  cutoff/target, checking oblast emptiness before mapping, non-crashing zero-day
+  warnings, two targeted tests, conditional Ridge run, D3 accepted (D4
+  unchanged), and plain-language README explanations. Now I need to pull the
+  palette values from the chart skill before writing the chart code.
+
+  Read 1 file, wrote 2 memories (ctrl+o to expand)
+
+● I'm using the reference palette's first three colours for the three alert
+  levels. Writing the Step 1 inspection script:
+● Write(src\inspect_data.py)
+  ⎿  Wrote 296 lines to src\inspect_data.py
+       1 """Step 1: verify the raw data before any modelling decision.
+       3 Run from the project root:
+       4     python -m src.inspect_data            # pinned dataset commi
+       5     python -m src.inspect_data --latest   # newest commit of the
+          dataset repo
+       7 Prints the report and saves it to reports/data_check.md, togethe
+         r with
+         el.csv and
+       9 reports/fig_daily_counts_by_level.png. Nothing is cleaned or dro
+      10 the point is to look at the data exactly as published.
+     … +363 lines (ctrl+o to expand)
+
+  Ran 2 shell commands, searched memories, wrote 1 memory (ctrl+o to expand)
+
+● The TLS error likely stems from something (antivirus/proxy) using a
+  Windows-trusted root cert that Python's requests library doesn't recognize, so
+  I'll test with urllib instead since it uses the Windows certificate
+  store—without disabling verification. I'll also add the needed flag to run the
+  ES module palette validator in Node.
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+● The download failed because requests' certifi CA bundle couldn't verify
+  GitHub's TLS cert, while the standard library (using Windows' cert store)
+  worked fine. I'll switch data.py to use the standard library with verification
+  left on, and remove the now-unused requests dependency from requirements.txt.
+  · summary
+
+● Write(src\data.py)
+  ⎿  Added 17 lines, removed 7 lines
+       3  
+       4  import hashlib
+       5  import json
+       6 +import ssl                                                     
+       7 +import urllib.request                                          
+       8  from datetime import datetime, timezone
+       9  from pathlib import Path
+      10  
+      11  import pandas as pd
+      10 -import requests                                                
+      12  
+      13  from . import config
+      14  
+      15 +USER_AGENT = "air-raid-forecast/0.1 (KSE Agentic AI School, Sta
+         +ge 2)"                                                         
+      16  
+      17 +                                                               
+      18 +def _get(url: str, timeout: int = 300) -> bytes:               
+      19 +    """HTTPS GET with the standard library.                    
+      20 +                                                               
+      21 +    Certificates are verified against the operating system's st
+         +ore. `requests` ships its own                                  
+      22 +    CA bundle (certifi), which failed on this machine with CERT
+         +IFICATE_VERIFY_FAILED.                                         
+      23 +    """                                                        
+      24 +    req = urllib.request.Request(url, headers={"User-Agent": US
+         +ER_AGENT})                                                     
+      25 +    with urllib.request.urlopen(req, timeout=timeout, context=s
+         +sl.create_default_context()) as resp:                          
+      26 +        return resp.read()                                     
+      27 +                                                               
+      28 +                                                               
+      29  def raw_url(file: str, commit: str) -> str:
+      30      return f"https://raw.githubusercontent.com/{config.DATASET_
+          REPO}/{commit}/{file}"
+      31  
+     ...
+      33  def latest_commit() -> tuple[str, str]:
+      34      """(sha, committer date UTC) of the newest commit on the da
+          taset's main branch."""
+      35      url = f"https://api.github.com/repos/{config.DATASET_REPO}/
+          commits/main"
+      22 -    r = requests.get(url, timeout=30)                          
+      23 -    r.raise_for_status()                                       
+      24 -    data = r.json()                                            
+      36 +    data = json.loads(_get(url, timeout=30))                   
+      37      return data["sha"], data["commit"]["committer"]["date"]
+      38  
+      39  
+     ...
+      58          return dest
+      59      dest.parent.mkdir(parents=True, exist_ok=True)
+      60      url = raw_url(file, commit)
+      49 -    r = requests.get(url, timeout=300)                         
+      50 -    r.raise_for_status()                                       
+      61      tmp = dest.with_name(dest.name + ".part")
+      52 -    tmp.write_bytes(r.content)                                 
+      62 +    tmp.write_bytes(_get(url))                                 
+      63      tmp.replace(dest)
+      64      meta = {"url": url, "downloaded_at_utc": datetime.now(timez
+          one.utc).isoformat(timespec="seconds")}
+      65      dest.with_name(dest.name + ".meta.json").write_text(json.du
+          mps(meta, indent=2), encoding="utf-8")
+
+● Write(requirements.txt)
+  ⎿  Removed 1 line
+      2  numpy==2.5.4
+      3  scikit-learn==1.9.1
+      4  matplotlib==3.11.2
+      5 -requests==2.34.2                                                
+      5  tzdata==2026.5
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Found three issues before finalizing: duplicate rows are inflating monthly
+  counts, the official data cuts off five weeks ago while volunteer data runs
+  more current, and my Dec 2025 annotation doesn't match the actual data. I'm
+  fixing these—deduplicating the tables, checking agreement between the two data
+  sources, and correcting the figure before sharing the report. · summary
+
+● Write(src\inspect_data.py)
+  ⎿  Added 168 lines, removed 67 lines
+       6  
+       7  Prints the report and saves it to reports/data_check.md, togeth
+          er with
+       8  reports/monthly_counts_by_level.csv, reports/daily_counts_by_le
+          vel.csv and
+       9 -reports/fig_daily_counts_by_level.png. Nothing is cleaned or dr
+         -opped here:                                                    
+      10 -the point is to look at the data exactly as published.         
+       9 +reports/fig_daily_counts_by_level.png. Nothing is written back 
+         +to the data: exact duplicate                                   
+      10 +rows are counted, and the tables from section 3 on show the dat
+         +a with the repeated copies                                     
+      11 +removed so that they are not counted twice.                    
+      12  """
+      13  from __future__ import annotations
+      14  
+     ...
+      26  
+      27  REQUIRED = ["oblast", "level", "started_at", "finished_at"]
+      28  KEY_COLS = ["oblast", "raion", "hromada", "level", "started_at"
+          ]
+      28 -# Date of the nationwide switch to raion-level alerts according
+         - to news reports.                                              
+      29 -# Drawn on the figure only as a reference for hypothesis H1, no
+         -t used anywhere else.                                          
+      30 -NEWS_DATE = pd.Timestamp("2025-12-15")                         
+      29  
+      30  # Reference palette (light mode): categorical slots 1-3 and cha
+          rt chrome.
+      31  LEVEL_COLORS = {"oblast": "#2a78d6", "raion": "#eb6834", "hroma
+          da": "#1baf7a"}
+     ...
+       83      else:
+       84          rep.add("empty values per column:")
+       85          rep.table(raw.isna().sum())
+       86 +    if "source" in raw.columns:                               
+       87 +        rep.add("source value counts:")                       
+       88 +        rep.table(raw["source"].value_counts(dropna=False))   
+       89  
+       90  
+       90 -def coverage(rep: Report, raw: pd.DataFrame, df: pd.DataFrame)
+          - -> None:                                                     
+       91 -    rep.section("2. Coverage, missing values, durations")     
+       91 +def describe_duplicates(rep: Report, raw: pd.DataFrame, df: pd
+          +.DataFrame) -> tuple[pd.Series, pd.Series]:                   
+       92 +    """Count exact duplicate rows; return (mask of repeated co
+          +pies, repeated copies per month)."""                          
+       93 +    rep.section("2. Duplicates, coverage, durations")         
+       94 +    dup = raw.duplicated()                                    
+       95 +    key = [c for c in KEY_COLS if c in raw.columns]           
+       96 +    rep.add(f"exact duplicate rows (second and later copies): 
+          +{int(dup.sum())} of {len(raw)} ({dup.mean():.1%}); "          
+       97 +            f"duplicates on {key}: {int(raw.duplicated(subset=
+          +key).sum())}")                                                
+       98 +    month = to_kyiv_naive(df["started_at"]).dt.to_period("M").
+          +rename("month")                                               
+       99 +    per_month = month[dup].value_counts().sort_index().rename(
+          +"repeated_copies_removed")                                    
+      100 +    if dup.any():                                             
+      101 +        pos = raw.index[dup]                                  
+      102 +        st = df.loc[dup, "started_at"]                        
+      103 +        rep.add(f"repeated copies sit at file rows {pos.min()}
+          + .. {pos.max()} and cover started_at "                        
+      104 +                f"{st.min():%Y-%m-%d} .. {st.max():%Y-%m-%d}")
+      105 +        share = (per_month / month.value_counts().reindex(per_
+          +month.index)).round(2).rename("share_of_month_rows")          
+      106 +        rep.add("repeated copies per month (Kyiv time of start
+          +):")                                                          
+      107 +        rep.table(pd.concat([per_month, share], axis=1))      
+      108 +    return dup, per_month                                     
+      109 +                                                              
+      110 +                                                              
+      111 +def coverage(rep: Report, raw: pd.DataFrame, df: pd.DataFrame,
+          + d: pd.DataFrame) -> None:                                    
+      112 +    """Time range, empty values and durations. `d` is `df` wit
+          +hout the repeated copies."""                                  
+      113      s, f = df["started_at"], df["finished_at"]
+      114      rep.add(f"parsed dtypes: started_at {s.dtype}, finished_at
+            {f.dtype}")
+      115      rows = {}
+     ...
+      125          }
+      126      rep.table(pd.DataFrame(rows).T)
+      127  
+      107 -    dur_min = (f - s).dt.total_seconds() / 60                 
+      108 -    rep.add("duration in minutes (finished_at - started_at):")
+      128 +    dur_min = (d["finished_at"] - d["started_at"]).dt.total_se
+          +conds() / 60                                                  
+      129 +    rep.add("duration in minutes (finished_at - started_at), r
+          +epeated copies removed:")                                     
+      130      rep.table(dur_min.describe(percentiles=[0.01, 0.5, 0.9, 0.
+           99]).round(1))
+      131      rep.add(f"duration <= 0: {int((dur_min <= 0).sum())}; > 24
+            h: {int((dur_min > 24 * 60).sum())}; "
+      132              f"> 7 days: {int((dur_min > 7 * 24 * 60).sum())}")
+      112 -    show = [c for c in ("oblast", "raion", "hromada", "level",
+          - "started_at", "finished_at") if c in df.columns]             
+      113 -    rep.add("10 longest alerts:")                             
+      114 -    rep.table(df.assign(hours=(dur_min / 60).round(1)).nlarges
+          -t(10, "hours")[show + ["hours"]])                             
+      133 +    show = [c for c in ("oblast", "raion", "hromada", "level",
+          + "started_at", "finished_at") if c in d.columns]              
+      134 +    rep.add("10 longest alerts (repeated copies removed):")   
+      135 +    rep.table(d.assign(hours=(dur_min / 60).round(1)).nlargest
+          +(10, "hours")[show + ["hours"]])                              
+      136 +    long = d.loc[dur_min > 24 * 60]                           
+      137 +    rep.add("alerts longer than 24 h, by oblast and level:")  
+      138 +    rep.table(pd.crosstab(long["oblast"], long["level"], margi
+          +ns=True))                                                     
+      139      if f.isna().any():
+      140          rep.add("rows with empty or unparseable finished_at (u
+           p to 10):")
+      141          rep.table(df.loc[f.isna(), show].head(10))
+      118 -    key = [c for c in KEY_COLS if c in raw.columns]           
+      119 -    rep.add(f"exact duplicate rows: {int(raw.duplicated().sum(
+          -))}; "                                                        
+      120 -            f"duplicates on {key}: {int(raw.duplicated(subset=
+          -key).sum())}")                                                
+      142  
+      143  
+      123 -def values(rep: Report, df: pd.DataFrame) -> None:            
+      124 -    rep.section("3. Values: alert levels and region names")   
+      144 +def values(rep: Report, d: pd.DataFrame) -> None:             
+      145 +    rep.section("3. Values: alert levels and region names (rep
+          +eated copies removed)")                                       
+      146      rep.add("level value counts:")
+      126 -    rep.table(df["level"].value_counts(dropna=False))         
+      127 -    day = to_kyiv_naive(df["started_at"]).dt.normalize().renam
+          -e("day")                                                      
+      128 -    per = (df.assign(day=day)                                 
+      147 +    rep.table(d["level"].value_counts(dropna=False))          
+      148 +    day = to_kyiv_naive(d["started_at"]).dt.normalize().rename
+          +("day")                                                       
+      149 +    per = (d.assign(day=day)                                  
+      150               .groupby("oblast", dropna=False)
+      151               .agg(rows=("level", "size"), first_seen=("day", "
+           min"), last_seen=("day", "max")))
+      152      per["first_seen"] = per["first_seen"].dt.strftime("%Y-%m-%
+           d")
+      153      per["last_seen"] = per["last_seen"].dt.strftime("%Y-%m-%d"
+           )
+      133 -    per = per.join(pd.crosstab(df["oblast"], df["level"]))    
+      134 -    rep.add(f"{df['oblast'].nunique()} distinct oblast values 
+          -"                                                             
+      154 +    per = per.join(pd.crosstab(d["oblast"], d["level"]))      
+      155 +    rep.add(f"{d['oblast'].nunique()} distinct oblast values "
+      156              "(rows, first/last day seen in Kyiv time, rows per
+            level):")
+      157      rep.table(per)
+      158      for col in ("raion", "hromada"):
+      138 -        if col in df.columns:                                 
+      139 -            rep.add(f"distinct {col} values: {df[col].nunique(
+          -)}")                                                          
+      159 +        if col in d.columns:                                  
+      160 +            rep.add(f"distinct {col} values: {d[col].nunique()
+          +}")                                                           
+      161  
+      162  
+      163  def plot_daily_by_level(daily: pd.DataFrame, path) -> None:
+      164      """Small multiples: one panel per alert level, shared time
+            axis, own y-axis each."""
+      144 -    last = daily.loc[daily.index > daily.index.max() - pd.Time
+          -delta(days=365)]                                              
+      165 +    last = daily.loc[daily.index > daily.index.max() - pd.Time
+          +delta(days=540)]                                              
+      166      levels = [c for c in daily.columns if c != "total"]
+      167      fig, axes = plt.subplots(len(levels), 1, figsize=(11, 2.4 
+           * len(levels)), sharex=True,
+      168                               squeeze=False, facecolor=SURFACE)
+      169      for ax, level in zip(axes[:, 0], levels):
+      170          ax.set_facecolor(SURFACE)
+      171          ax.plot(last.index, last[level], color=LEVEL_COLORS.ge
+           t(level, MUTED), lw=1.1)
+      151 -        ax.axvline(NEWS_DATE, color=INK_2, lw=0.8, ls=(0, (4, 
+          -3)))                                                          
+      172          ax.set_title(f"{level}-level alert rows per day", loc=
+           "left", color=INK, fontsize=10)
+      173          ax.set_ylim(bottom=0)
+      174          ax.grid(axis="y", color=GRID, lw=0.6)
+     ...
+      178          for side in ("left", "bottom"):
+      179              ax.spines[side].set_color(AXIS)
+      180          ax.tick_params(colors=MUTED, labelsize=8, labelcolor=I
+           NK_2)
+      161 -    axes[0, 0].annotate("15 Dec 2025: raion-level alerts natio
+          -nwide (news, hypothesis H1)",                                 
+      162 -                        xy=(NEWS_DATE, 1), xycoords=("data", "
+          -axes fraction"), xytext=(5, -2),                              
+      163 -                        textcoords="offset points", va="top", 
+          -fontsize=8, color=INK_2)                                      
+      164 -    fig.suptitle("Official alert rows per day by level, last 1
+          -2 months (Kyiv time of start)",                               
+      181 +    fig.suptitle("Official alert rows per day by level, last 1
+          +8 months "                                                    
+      182 +                 "(repeated copies removed; Kyiv date of start
+          +; separate y-axis per panel)",                                
+      183                   x=0.01, ha="left", color=INK, fontsize=11)
+      184      fig.tight_layout()
+      185      fig.savefig(path, dpi=130, facecolor=SURFACE)
+      186      plt.close(fig)
+      187  
+      188  
+      171 -def collapse_test(rep: Report, df: pd.DataFrame) -> None:     
+      172 -    rep.section("4. Collapse test: alert rows by level over ti
+          -me (Kyiv time of start)")                                     
+      173 -    local = to_kyiv_naive(df["started_at"])                   
+      189 +def collapse_test(rep: Report, d: pd.DataFrame, dup_per_month:
+          + pd.Series) -> None:                                          
+      190 +    rep.section("4. Collapse test: alert rows by level over ti
+          +me (repeated copies removed; Kyiv time of start)")            
+      191 +    local = to_kyiv_naive(d["started_at"])                    
+      192      month = local.dt.to_period("M").rename("month")
+      175 -    monthly = pd.crosstab(month, df["level"])                 
+      193 +    monthly = pd.crosstab(month, d["level"])                  
+      194      monthly["total"] = monthly.sum(axis=1)
+      195 +    monthly = monthly.join(dup_per_month).fillna(0).astype(int
+          +)                                                             
+      196      monthly.to_csv(config.REPORTS_DIR / "monthly_counts_by_lev
+           el.csv")
+      178 -    rep.add("rows per month by level, last 18 months (the last
+          - month is partial; "                                          
+      197 +    rep.add("rows per month by level, last 18 months (last mon
+          +th partial; "                                                 
+      198              "full table: reports/monthly_counts_by_level.csv):
+           ")
+      199      rep.table(monthly.tail(18))
+      200  
+      201      day = local.dt.normalize().rename("day")
+      183 -    daily = pd.crosstab(day, df["level"])                     
+      202 +    daily = pd.crosstab(day, d["level"])                      
+      203      daily = daily.reindex(pd.date_range(daily.index.min(), dai
+           ly.index.max(), freq="D"), fill_value=0)
+      204      daily.index.name = "day"
+      205      daily["total"] = daily.sum(axis=1)
+     ...
+      209              f"{daily.index.max():%Y-%m-%d}: {len(zero_days)}")
+      210      if len(zero_days):
+      211          shown = zero_days[-30:]
+      193 -        rep.add("  " + ", ".join(f"{d:%Y-%m-%d}" for d in show
+          -n)                                                            
+      212 +        rep.add("  " + ", ".join(f"{x:%Y-%m-%d}" for x in show
+          +n)                                                            
+      213                  + (" (last 30 shown)" if len(zero_days) > 30 e
+           lse ""))
+      214      rep.add("rows per day by level, last 60 days (full table: 
+           reports/daily_counts_by_level.csv):")
+      215      last60 = daily.tail(60).copy()
+      216      last60.index = last60.index.strftime("%Y-%m-%d %a")
+      217      rep.table(last60)
+      218  
+      200 -    if "oblast" in set(df["level"].dropna()):                 
+      201 -        not_oblast = (df["level"] != "oblast").rename("not_obl
+          -ast_level")                                                   
+      202 -        share = pd.crosstab(df["oblast"], month, values=not_ob
+          -last, aggfunc="mean")                                         
+      219 +    if "oblast" in set(d["level"].dropna()):                  
+      220 +        not_oblast = (d["level"] != "oblast").rename("not_obla
+          +st_level")                                                    
+      221 +        share = pd.crosstab(d["oblast"], month, values=not_obl
+          +ast, aggfunc="mean")                                          
+      222          since_2025 = share.loc[:, share.columns >= pd.Period("
+           2025-01", "M")] >= 0.5
+      223          first50 = since_2025.idxmax(axis=1).where(since_2025.a
+           ny(axis=1))
+      224          recent = share.loc[:, share.columns >= pd.Period("2025
+           -07", "M")]
+     ...
+      236      rep.add(f"figure: {fig_path.relative_to(config.ROOT).as_po
+           six()}")
+      237  
+      238  
+      220 -def tail_check(rep: Report, df: pd.DataFrame, commit_time: str
+          -) -> None:                                                    
+      221 -    rep.section("5. Tail completeness: is the last day complet
+          -e?")                                                          
+      239 +def stream_gaps(rep: Report, starts: pd.Series, label: str, si
+          +nce: str = "2025-01-01",                                      
+      240 +                min_hours: float = 8, top: int = 12) -> None: 
+      241 +    """Long silences between consecutive alert starts: a quiet
+          + night is short, an outage is long."""                        
+      242 +    s = starts.dropna().sort_values()                         
+      243 +    s = s[s >= pd.Timestamp(since, tz="UTC")]                 
+      244 +    g = pd.DataFrame({                                        
+      245 +        "gap_hours": (s.diff().dt.total_seconds() / 3600).roun
+          +d(1),                                                         
+      246 +        "last_start_before_gap": s.shift(1).dt.tz_convert(conf
+          +ig.TZ).dt.strftime("%Y-%m-%d %H:%M"),                         
+      247 +        "next_start_after_gap": s.dt.tz_convert(config.TZ).dt.
+          +strftime("%Y-%m-%d %H:%M"),                                   
+      248 +    })                                                        
+      249 +    big = g[g["gap_hours"] >= min_hours].sort_values("gap_hour
+          +s", ascending=False)                                          
+      250 +    rep.add(f"{label}: gaps of >= {min_hours:g} h between cons
+          +ecutive alert starts since {since} "                          
+      251 +            f"(Kyiv time): {len(big)}; largest {min(top, len(b
+          +ig))}:")                                                      
+      252 +    rep.table(big.head(top))                                  
+      253 +                                                              
+      254 +                                                              
+      255 +def tail_check(rep: Report, d: pd.DataFrame, commit_time: str)
+          + -> None:                                                     
+      256 +    rep.section("5. Official file: how fresh and how complete 
+          +is the tail?")                                                
+      257      commit_kyiv = pd.Timestamp(commit_time).tz_convert(config.
+           TZ)
+      223 -    rep.add(f"dataset commit time: {commit_time} = {commit_kyi
+          -v:%Y-%m-%d %H:%M} Kyiv")                                      
+      224 -    rep.add(f"latest started_at: {df['started_at'].max().tz_co
+          -nvert(config.TZ):%Y-%m-%d %H:%M} Kyiv; "                      
+      225 -            f"latest finished_at: {df['finished_at'].max().tz_
+          -convert(config.TZ):%Y-%m-%d %H:%M} Kyiv")                     
+      226 -    day = to_kyiv_naive(df["started_at"]).dt.normalize().renam
+          -e("day")                                                      
+      258 +    last_start = d["started_at"].max().tz_convert(config.TZ)  
+      259 +    last_end = d["finished_at"].max().tz_convert(config.TZ)   
+      260 +    rep.add(f"dataset commit: {commit_time} = {commit_kyiv:%Y-
+          +%m-%d %H:%M} Kyiv")                                           
+      261 +    rep.add(f"official file: latest started_at {last_start:%Y-
+          +%m-%d %H:%M} Kyiv, latest finished_at "                       
+      262 +            f"{last_end:%Y-%m-%d %H:%M} Kyiv = {(commit_kyiv.d
+          +ate() - last_start.date()).days} days "                       
+      263 +            "before the commit date")                         
+      264 +    stream_gaps(rep, d["started_at"], "official file")        
+      265 +                                                              
+      266 +    day = to_kyiv_naive(d["started_at"]).dt.normalize().rename
+          +("day")                                                       
+      267      per_day = pd.DataFrame({
+      268          "rows": day.value_counts(),
+      229 -        "oblasts_with_alerts": df.groupby(day)["oblast"].nuniq
+          -ue(),                                                         
+      269 +        "oblasts_with_alerts": d.groupby(day)["oblast"].nuniqu
+          +e(),                                                          
+      270      }).sort_index()
+      271      per_day = per_day.reindex(pd.date_range(per_day.index.min(
+           ), per_day.index.max(), freq="D"), fill_value=0)
+      232 -    ref = per_day.iloc[-35:-7]                                
+      272 +    med = per_day["rows"].rolling(28).median().shift(1).rename
+          +("prev28_median_rows")                                        
+      273 +    flag = per_day.join(med).assign(ratio=lambda x: (x["rows"]
+          + / x["prev28_median_rows"]).round(2))                         
+      274 +    flag = flag.loc["2025-01-01":]                            
+      275 +    flag = flag[flag["ratio"] < 0.5]                          
+      276 +    flag.index = flag.index.strftime("%Y-%m-%d %a")           
+      277 +    rep.add("days since 2025-01-01 with fewer than half the ro
+          +ws of the previous-28-day median "                            
+      278 +            "(outage, or a partial day at the start/end of an 
+          +outage or of the file):")                                     
+      279 +    rep.table(flag)                                           
+      280      last7 = per_day.tail(7).copy()
+      234 -    last7["rows_vs_prev28_median"] = (last7["rows"] / ref["row
+          -s"].median()).round(2)                                        
+      235 -    last7["oblasts_vs_prev28_median"] = (last7["oblasts_with_a
+          -lerts"] / ref["oblasts_with_alerts"].median()).round(2)       
+      281      last7.index = last7.index.strftime("%Y-%m-%d %a")
+      282 +    rep.add("last 7 days of the official file:")              
+      283      rep.table(last7)
+      238 -    rep.add(f"median of the previous 28 days: rows {ref['rows'
+          -].median():.0f}, "                                            
+      239 -            f"oblasts with alerts {ref['oblasts_with_alerts'].
+          -median():.0f}")                                               
+      240 -    candidate = (commit_kyiv.normalize() - pd.Timedelta(days=1
+          -)).date()                                                     
+      241 -    rep.add(f"candidate last complete day (commit day in Kyiv 
+          -minus one): {candidate}, to be confirmed")                    
+      284  
+      285  
+      244 -def volunteer_check(rep: Report, path) -> None:               
+      245 -    rep.section("6. Volunteer file (cross-check only, not used
+          - for modelling)")                                             
+      286 +def volunteer_check(rep: Report, path, official: pd.DataFrame)
+          + -> None:                                                     
+      287 +    rep.section("6. Volunteer file, and how well it matches th
+          +e official file where they overlap")                          
+      288      v = load_raw(path)
+      289      rep.add(f"shape: {v.shape}; columns: {list(v.columns)}")
+      290      rep.table(v.head(3))
+      249 -    if "started_at" not in v.columns:                         
+      250 -        rep.add("no started_at column: skipped")              
+      291 +    missing = [c for c in ("region", "started_at", "finished_a
+          +t") if c not in v.columns]                                    
+      292 +    if missing:                                               
+      293 +        rep.add(f"STOP: expected columns {missing} are missing
+          + in the volunteer file")                                      
+      294          return
+      295      s = pd.to_datetime(v["started_at"], utc=True, format="ISO8
+           601", errors="coerce")
+      296 +    f = pd.to_datetime(v["finished_at"], utc=True, format="ISO
+          +8601", errors="coerce")                                       
+      297      bad = int((s.isna() & v["started_at"].notna()).sum())
+      254 -    rep.add(f"started_at range: {s.min()} .. {s.max()} (unpars
+          -eable: {bad})")                                               
+      255 -    rep.add("rows per month (Kyiv time), last 12 months:")    
+      256 -    rep.table(to_kyiv_naive(s).dt.to_period("M").value_counts(
+          -).sort_index().tail(12))                                      
+      298 +    rep.add(f"started_at range: {s.min().tz_convert(config.TZ)
+          +:%Y-%m-%d %H:%M} .. "                                         
+      299 +            f"{s.max().tz_convert(config.TZ):%Y-%m-%d %H:%M} K
+          +yiv (unparseable: {bad}); "                                   
+      300 +            f"latest finished_at {f.max().tz_convert(config.TZ
+          +):%Y-%m-%d %H:%M} Kyiv")                                      
+      301 +    rep.add(f"exact duplicate rows: {int(v.duplicated().sum())
+          +}; empty values per column: "                                 
+      302 +            + ", ".join(f"{c}={int(v[c].isna().sum())}" for c 
+          +in v.columns))                                                
+      303  
+      304 +    local = to_kyiv_naive(s)                                  
+      305 +    month = local.dt.to_period("M").rename("month")           
+      306 +    day = local.dt.normalize().rename("day")                  
+      307 +    by_month = pd.DataFrame({"rows": month.value_counts()})   
+      308 +    if "naive" in v.columns:                                  
+      309 +        naive = v["naive"].str.lower().eq("true")             
+      310 +        by_month["naive_share"] = naive.groupby(month).mean().
+          +round(2)                                                      
+      311 +    rep.add("rows per month" + (" and share of 'naive' rows (e
+          +nd unknown, finished_at = started_at + 30 min)"               
+      312 +                                if "naive" in v.columns else "
+          +") + ", last 12 months:")                                     
+      313 +    rep.table(by_month.sort_index().tail(12))                 
+      314 +    rep.add("rows per day, last 14 days (the last day is parti
+          +al):")                                                        
+      315 +    rep.table(day.value_counts().sort_index().tail(14))       
+      316 +    stream_gaps(rep, s, "volunteer file")                     
+      317  
+      318 +    reg = (pd.DataFrame({"region": v["region"], "day": day}).g
+          +roupby("region")                                              
+      319 +             .agg(rows=("day", "size"), first_seen=("day", "mi
+          +n"), last_seen=("day", "max")))                               
+      320 +    reg["first_seen"] = reg["first_seen"].dt.strftime("%Y-%m-%
+          +d")                                                           
+      321 +    reg["last_seen"] = reg["last_seen"].dt.strftime("%Y-%m-%d"
+          +)                                                             
+      322 +    off_names, vol_names = set(official["oblast"].dropna()), s
+          +et(v["region"].dropna())                                      
+      323 +    rep.add(f"{len(vol_names)} volunteer regions. Only in the 
+          +volunteer file: {sorted(vol_names - off_names)}; "            
+      324 +            f"only in the official file: {sorted(off_names - v
+          +ol_names)}")                                                  
+      325 +    rep.table(reg)                                            
+      326 +                                                              
+      327 +    # Overlap: do the two sources move together before and aft
+          +er the switch to raion-level alerts?                          
+      328 +    o_day = to_kyiv_naive(official["started_at"]).dt.normalize
+          +()                                                            
+      329 +    o_regions = official.groupby(o_day)["oblast"].nunique()   
+      330 +    o_rows = o_day.value_counts()                             
+      331 +    o_oblast_rows = o_day[official["level"] == "oblast"].value
+          +_counts()                                                     
+      332 +    v_regions = v["region"].groupby(day).nunique()            
+      333 +    v_rows = day.value_counts()                               
+      334 +    periods = {                                               
+      335 +        "2024 (before the switch)": ("2024-01-01", "2024-12-31
+          +"),                                                           
+      336 +        "2025-01..06 (before the switch)": ("2025-01-01", "202
+          +5-06-30"),                                                    
+      337 +        "2026-03-01..08-28 (after the switch, before the outag
+          +e)": ("2026-03-01", "2026-08-28"),                            
+      338 +    }                                                         
+      339 +    out = {}                                                  
+      340 +    for name, (a, b) in periods.items():                      
+      341 +        idx = pd.date_range(a, b, freq="D")                   
+      342 +        o_r, v_r = o_regions.reindex(idx, fill_value=0), v_reg
+          +ions.reindex(idx, fill_value=0)                               
+      343 +        out[name] = {                                         
+      344 +            "days": len(idx),                                 
+      345 +            "official rows/day, all levels": round(o_rows.rein
+          +dex(idx, fill_value=0).mean(), 1),                            
+      346 +            "official rows/day, oblast level": round(o_oblast_
+          +rows.reindex(idx, fill_value=0).mean(), 1),                   
+      347 +            "volunteer rows/day": round(v_rows.reindex(idx, fi
+          +ll_value=0).mean(), 1),                                       
+      348 +            "official: oblasts with an alert start/day": round
+          +(o_r.mean(), 1),                                              
+      349 +            "volunteer: regions with an alert start/day": roun
+          +d(v_r.mean(), 1),                                             
+      350 +            "daily correlation of those two counts": round(flo
+          +at(o_r.corr(v_r)), 2),                                        
+      351 +        }                                                     
+      352 +    rep.add("official vs volunteer, daily, Kyiv date of start 
+          +(official with repeated copies removed):")                    
+      353 +    rep.table(pd.DataFrame(out))                              
+      354 +                                                              
+      355 +                                                              
+      356  def main(argv: list[str] | None = None) -> None:
+      357      parser = argparse.ArgumentParser(description="Step 1: data
+            verification report")
+      358      parser.add_argument("--latest", action="store_true",
+     ...
+      366      snap = write_snapshot(commit, commit_time, {"official": of
+           ficial, "volunteer": volunteer})
+      367  
+      368      rep = Report()
+      272 -    rep.add("# Step 1: data check (raw data, nothing cleaned)"
+          -)                                                             
+      369 +    rep.add("# Step 1: data check")                           
+      370      rep.add(f"dataset {config.DATASET_REPO} @ {commit} (commit
+           ted {commit_time})")
+      371      rep.add(f"file {config.OFFICIAL_FILE}: {snap['files']['off
+           icial']['bytes']} bytes, "
+      372              f"sha256 {snap['files']['official']['sha256']}")
+      373 +    rep.add(f"file {config.VOLUNTEER_FILE}: {snap['files']['vo
+          +lunteer']['bytes']} bytes, "                                  
+      374 +            f"sha256 {snap['files']['volunteer']['sha256']}") 
+      375  
+      376      raw = load_raw(official)
+      377      raw_view(rep, raw)
+     ...
+      382          sys.exit(1)
+      383  
+      384      df = parse_times(raw)
+      286 -    coverage(rep, raw, df)                                    
+      287 -    values(rep, df)                                           
+      288 -    collapse_test(rep, df)                                    
+      289 -    tail_check(rep, df, commit_time)                          
+      290 -    volunteer_check(rep, volunteer)                           
+      385 +    dup, dup_per_month = describe_duplicates(rep, raw, df)    
+      386 +    d = df.loc[~dup]                                          
+      387 +    coverage(rep, raw, df, d)                                 
+      388 +    values(rep, d)                                            
+      389 +    collapse_test(rep, d, dup_per_month)                      
+      390 +    tail_check(rep, d, commit_time)                           
+      391 +    volunteer_check(rep, volunteer, d)                        
+      392      rep.save(config.REPORTS_DIR / "data_check.md")
+      393      print(f"\nreport saved to {config.REPORTS_DIR / 'data_chec
+           k.md'}")
+      394  
+
+● Re-running the Step 1 report with the duplicate-aware tables, the gap detector
+  and the volunteer-vs-official comparison. I'll show you the result once it
+  checks out.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The report ran, but some figures contradict my earlier plan. I'm now adding
+  two checks to the volunteer section—alert durations and whether recent
+  volunteer rows are mostly placeholders—before sharing results. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● Update(src\inspect_data.py)
+  ⎿  Added 12 lines, removed 1 line
+      311      rep.add("rows per month" + (" and share of 'naive' rows (e
+           nd unknown, finished_at = started_at + 30 min)"
+      312                                  if "naive" in v.columns else "
+           ") + ", last 12 months:")
+      313      rep.table(by_month.sort_index().tail(12))
+      314 +    last14 = pd.DataFrame({"rows": day.value_counts()})       
+      315 +    if "naive" in v.columns:                                  
+      316 +        last14["naive_rows"] = naive.groupby(day).sum().astype
+          +(int)                                                         
+      317      rep.add("rows per day, last 14 days (the last day is parti
+           al):")
+      315 -    rep.table(day.value_counts().sort_index().tail(14))       
+      318 +    rep.table(last14.sort_index().tail(14))                   
+      319 +    dur_min = (f - s).dt.total_seconds() / 60                 
+      320 +    cols = {"all rows": dur_min}                              
+      321 +    if "naive" in v.columns:                                  
+      322 +        cols["not naive"] = dur_min[~naive]                   
+      323 +    rep.add("alert duration in minutes (finished_at - started_
+          +at):")                                                        
+      324 +    rep.table(pd.DataFrame({k: x.describe(percentiles=[0.01, 0
+          +.5, 0.9, 0.99]) for k, x in cols.items()}).round(1))          
+      325 +    rep.add(f"duration <= 0: {int((dur_min <= 0).sum())}; > 24
+          + h: {int((dur_min > 24 * 60).sum())}; "                       
+      326 +            f"> 7 days: {int((dur_min > 7 * 24 * 60).sum())}")
+      327      stream_gaps(rep, s, "volunteer file")
+      328  
+      329      reg = (pd.DataFrame({"region": v["region"], "day": day}).g
+           roupby("region")
+
+● Oblast-level rows decline steadily then drop sharply at the start of November
+  2025, with raion-level rows rising to replace them while hromada-level stays
+  flat. I'll re-run the report with the new volunteer checks and pull the exact
+  days around the cliff from the daily CSV. · summary
+
+  Searched for 1 pattern, ran 1 shell command (ctrl+o to expand)
+
+● I've found the official data switch from oblast- to raion-level reporting
+  happened on 2025-11-04/05, not Dec 15 as previously assumed, and the volunteer
+  dataset's 84% rise in rows per day despite flat alert regions may also stem
+  from this switch. I'll check volunteer monthly counts across November 2025
+  before setting a target. · summary
+
+● Update(src\inspect_data.py)
+  ⎿  Added 2 lines, removed 2 lines
+      309          naive = v["naive"].str.lower().eq("true")
+      310          by_month["naive_share"] = naive.groupby(month).mean().
+           round(2)
+      311      rep.add("rows per month" + (" and share of 'naive' rows (e
+           nd unknown, finished_at = started_at + 30 min)"
+      312 -                                if "naive" in v.columns else "
+          -") + ", last 12 months:")                                     
+      313 -    rep.table(by_month.sort_index().tail(12))                 
+      312 +                                if "naive" in v.columns else "
+          +") + ", last 24 months:")                                     
+      313 +    rep.table(by_month.sort_index().tail(24))                 
+      314      last14 = pd.DataFrame({"rows": day.value_counts()})
+      315      if "naive" in v.columns:
+      316          last14["naive_rows"] = naive.groupby(day).sum().astype
+           (int)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Steps 0 and 1 are done and I've stopped, so the cutoff and the target are
+  yours to decide. The official file stops on 2026-09-07, 35 days before today.
+  The volunteer file in the same repo runs to 2026-10-12. I haven't written any
+  target, split or model code yet.
+
+  The full report is reports/data_check.md, and the daily counts per level are
+  plotted in reports/fig_daily_counts_by_level.png.
+
+  What the data shows (dataset commit d10c80f, 2026-10-12; the downloaded file
+  sizes match GitHub's listing, so nothing is truncated)
+
+  - Official columns: oblast, raion, hromada, level, started_at, finished_at,
+    source.
+    - Times are UTC. source exists and is always official, so your note was
+      right and my plan's doubt was wrong.
+    - The volunteer file has different columns: region, started_at, finished_at,
+      naive.
+  - Your stop condition didn't trigger. oblast is filled on every row at every
+    level, so no mapping is needed.
+  - The official file has a hole, then ends. It has no alert starts for 104.9 h
+    (2026-08-29 07:55 to 2026-09-02 16:48 Kyiv). The next-longest gap since 2025
+    is 19.1 h. The volunteer file has no gap of 8 h or more in that period.
+    - The last complete official day before the hole is 2026-08-28. The file's
+      last record is 2026-09-07 08:28 Kyiv.
+  - The volunteer file is current. Its last start is 2026-10-12 07:49 Kyiv, so
+    the last complete day is 2026-10-11. It has no duplicates and no empty
+    values, and it uses the same 25 region names as the official file.
+  - The late-2025 "collapse" is a change in how alerts are recorded, not missing
+    data.
+    - Official oblast-level rows go from 10 on 2025-11-04 to 1 on 2025-11-05.
+      Raion rows jump from 115 to 268 to 330, and total rows rise.
+    - The rollout was staged from August 2025, so the 2025-08-31 clip wasn't
+      clean either.
+    - After the switch the oblast-level series averages about 2 rows a day,
+      against 59 a day in 2024. That is why summer's MAE of 1.26 meant nothing.
+  - The official file contains a second collapse that is fake. 113,845 rows
+    (38%) are exact duplicates; the history up to 2026-01-25 is in the file
+    twice. Raw monthly totals drop from 15,394 in January to 7,930 in February
+    2026 because of this. My first report counted them, and all tables are now
+    deduplicated.
+  - Long alerts distort the "any alert in the oblast" target I proposed. There
+    are 897 alerts longer than 24 h, the longest 604 days, mostly in Donetska,
+    Dnipropetrovska and Zaporizka. Those oblasts would sit near 24 h for weeks.
+  - The volunteer file tracks the official one. The daily number of regions with
+    an alert start correlates 0.99 (2024), 0.94 (2025 H1) and 0.96 (2026-03 to
+    08-28).
+    - Its monthly rows show no step at the switch, but they grow about 2.5× over
+      15 months.
+    - About 10% of its recent rows are naive, meaning the end time is a
+      30-minute placeholder. In most earlier months the share is 4–6%.
+
+  ┌─────────┬───────────────────────┬─────────────────────┬──────────────────┐
+  │  Month  │ Official oblast-level │ Official all levels │    Volunteer     │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2025-09 │ 704                   │ 4,737               │ 2,168            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2025-10 │ 716                   │ 4,923               │ 2,291            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2025-11 │ 165                   │ 8,089               │ 2,505            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2025-12 │ 24                    │ 8,058               │ 2,464            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-01 │ 58                    │ 8,426               │ 2,784            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-02 │ 41                    │ 7,930               │ 2,558            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-03 │ 39                    │ 9,746               │ 3,343            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-04 │ 35                    │ 8,613               │ 3,001            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-05 │ 58                    │ 10,085              │ 3,402            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-06 │ 46                    │ 10,011              │ 3,298            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-07 │ 58                    │ 11,044              │ 3,408            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-08 │ 91                    │ 10,685              │ 3,906            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-09 │ 22 (to 09-07)         │ 1,937               │ 4,449            │
+  ├─────────┼───────────────────────┼─────────────────────┼──────────────────┤
+  │ 2026-10 │ none                  │ none                │ 1,793 (to 10-12) │
+  └─────────┴───────────────────────┴─────────────────────┴──────────────────┘
+
+  Where my plan was wrong. I took 2026-10-11 as the last complete day, but the
+  official file ends 2026-09-07. I doubted the source column, but it exists. I
+  used 15 Dec 2025 from news reports as the switch date, but in the data it is
+  2025-11-05. I guessed volunteer collection might have stopped, but it is the
+  only fresh source. Also, requests failed TLS verification here, so downloads
+  now use the standard library with verification still on.
+
+  Not verified: why the official file stops, and whether volunteer counts are
+  inflated by alerts being split after the switch. The volunteer series shows no
+  step at the switch, but the 2.5× growth can't be explained from this data
+  alone.
+
+  Decisions for you
+
+  1. Data and cutoff.
+     - A (recommended): use the volunteer file with no cutoff. Test is
+       2026-08-17 to 2026-10-11 (Mon–Sun, 56 days) and validation is 2026-06-22
+       to 2026-08-16. The official file stays as a cross-check and README
+       material.
+     - B: use the official file only. Cut at 2026-08-28, test 2026-07-04 to
+       2026-08-28. That is six weeks older, and it needs deduplication and
+       long-alert rules.
+  2. Target, if you pick A.
+     - A1 (recommended): number of alert starts per day, nationwide, for 24
+       regions (Luhanska excluded), by Kyiv date. It uses no end times, so naive
+       doesn't matter, and it is the same kind of target as summer. Your
+       midnight test becomes "an alert starting 21:30 UTC counts on the next
+       Kyiv day".
+     - A2: alert-hours per day with intervals split at Kyiv midnight. It fits
+       the README text you wanted and your midnight test, but it costs 30–40
+       more minutes and depends on those 30-minute placeholders.
+
+  Nothing is committed yet; the repo has no commits and is on master. A reply
+  like "A, A1" is enough, and I'll build the target, split and baselines next.
+
+> /model sonnet
+  ⎿  Set model to claude-sonnet-5-5
+
+> <ide_opened_file>The user opened the file
+  c:\Users\Kolya\projects\AI_Agentic_School_Domanskyi\.gitignore in the IDE.
+  This may or may not be related to the current task.</ide_opened_file>
+
+> A, A1. But before building, one check. The volunteer row count grows about
+  2.5x over 15 months, while the number of regions with an alert start per day
+  stays flat at about 17-18. That looks like alerts being split into more
+  starts per region after the switch, which would be a measurement change, the
+  same trap as in summer. Show me alert starts per active region per month for
+  2024-2026. If it jumps around the switch, document it in the README and
+  choose the training window (all history vs. after the switch) on validation,
+  not on test.
+  Exclude Luhanska and the partial day 2026-10-12. Keep the official file only
+  as a cross-check and README evidence. Commit Step 0-1 now, then build the
+  target, split and baselines.
+
+● First I'll check the clock against your 20:30 cutoff and the state of the
+  working tree.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Committing Step 0–1 now, while in parallel having two agents independently
+  verify the splitting diagnostics (one with pure standard library, one by
+  reviewing the dataset repo's own processing code) to double-check my
+  pandas-based results before the 20:30 cutoff. · summary
+
+● Workflow(Independently recompute volunteer alert-splitting diagnostics (stdlib
+          only) and read how the dataset builds volunteer rows)
+  ⎿  /workflows to view dynamic workflow runs
+
+  Committed 15e689a (ctrl+o to expand)
+
+● Step 0–1 is committed as 15e689a on main. While the cross-check runs, I'll
+  start writing the target module, which both the splitting check and forecast
+  need and which encodes the two cleaning rules (excluding Luhanska, dropping
+  the partial day). · summary
+
+● Update(src\config.py)
+  ⎿  Added 8 lines
+      17  
+      18  TZ = "Europe/Kyiv"
+      19  
+      20 +# Regions left out of the target. Luhanska has 1-3 alerts, all 
+         +in 2022; Crimea is in neither file.                            
+      21 +EXCLUDED_REGIONS = ("Luhanska oblast",)                        
+      22 +                                                               
+      23 +# Measurement check of the volunteer series (src/check_measurem
+         +ent.py).                                                       
+      24 +DIAG_FIRST_MONTH = "2024-01"                                   
+      25 +SWITCH_WINDOW_DAYS = 90                                        
+      26 +RAPID_RESTART_MIN = 15                                         
+      27 +                                                               
+      28  # Chronological split sizes in days: train < validation < test.
+      29  TEST_DAYS = 56
+      30  VAL_DAYS = 56
+● Write(src\target.py)
+  ⎿  Wrote 141 lines to src\target.py
+       1 """Step 2: the forecasting target.
+       3 y[D] = number of volunteer alert starts in Ukraine on Kyiv calen
+         dar day D (24 regions).
+       5 Only start timestamps define the target, never end times. A fore
+         cast made at 00:00 of day D may
+         rope/Kyiv wall-clock dates, so an
+       7 alert that starts at 21:30 UTC on 11 Oct (summer time) belongs t
+       8
+       9     python -m src.target            # pinned dataset commit
+         et repo
+     … +167 lines (ctrl+o to expand)
+
+● I'll document the decision rule—top 3 of 29 candidate dates qualifies as a
+  jump—in the script's docstring before viewing any results, ensuring the
+  threshold isn't fitted after the fact. · summary
+
+● Write(src\plotting.py)
+  ⎿  Wrote 35 lines to src\plotting.py
+      1 """Shared chart styling: reference palette, light mode (categoric
+        al slots 1-3 validated for all pairs)."""
+      2 import matplotlib
+      3
+      4 matplotlib.use("Agg")
+      6
+      7 SURFACE, INK, INK_2, MUTED, GRID, AXIS = "#fcfcfb", "#0b0b0b", "#
+        52514e", "#898781", "#e1e0d9", "#c3c2b7"
+      8 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+      9
+     … +29 lines (ctrl+o to expand)
+
+● Write(src\check_measurement.py)
+  ⎿  Wrote 199 lines to src\check_measurement.py
+      1 """Is the growth in volunteer alert starts a change in what is me
+      2
+      3     python -m src.check_measurement            # pinned dataset c
+      4     python -m src.check_measurement --latest
+      5
+        t starts per month in 2026 than in
+      7 H1 2025, while the number of regions with an alert start per day
+      8 alert were split into several starts after the official switch to
+         raion-level alerts, starts per active
+        eaning.
+     … +261 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The build succeeded with 116,171 rows and no zero days, last complete day
+  2026-10-11, but the check script output got truncated due to a pipe issue with
+  Select-Object -First 5—re-running it properly now. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● No step at the 2025-11-05 switch, but the volunteer series shows a steady
+  drift — I'll include those numbers in the summary. Next I'll build the split,
+  baselines, and walk-forward evaluation. · summary
+
+● Write(src\split.py)
+  ⎿  Wrote 40 lines to src\split.py
+       1 """Step 3: chronological split. train < validation < test, test
+         = the latest period.
+       2
+         d later the training window of a
+       4 model). Test is only scored, never used to choose anything.
+       5 """
+       6 from __future__ import annotations
+       8 from dataclasses import dataclass
+       9
+      10 import pandas as pd
+     … +41 lines (ctrl+o to expand)
+
+● Write(src\models.py)
+  ⎿  Wrote 40 lines to src\models.py
+       1 """Step 4: baselines. Every forecast for day D uses only days be
+       2
+       3 forecast_all   fast, vectorised: row D is built from y[D-1], y[D
+         -2], ... because every input is shifted first.
+         st day of the history it is given. It is written
+       5                without any shifting, so the truncation test can
+       6 """
+       7 from __future__ import annotations
+       8
+      10 import pandas as pd
+     … +42 lines (ctrl+o to expand)
+
+● Write(src\evaluate.py)
+  ⎿  Wrote 104 lines to src\evaluate.py
+       1 """Step 5: walk-forward evaluation of the baselines and the choi
+       2
+       3 One-step-ahead, walk-forward: for every day in the evaluation wi
+         ndow we act as if it were 00:00 of that day,
+         n we move on by one day. Settings (the moving
+       5 average window) are chosen on validation; the test window is onl
+       6 """
+       7 from __future__ import annotations
+       8
+      10 import pandas as pd
+     … +143 lines (ctrl+o to expand)
+
+● Update(src\inspect_data.py)
+  ⎿  Added 2 lines, removed 8 lines
+      364      rep.table(pd.DataFrame(out))
+      365  
+      366  
+      367 -def main(argv: list[str] | None = None) -> None:              
+      368 -    parser = argparse.ArgumentParser(description="Step 1: data
+          - verification report")                                        
+      369 -    parser.add_argument("--latest", action="store_true",      
+      370 -                        help="use the newest dataset commit in
+          -stead of the pinned one")                                     
+      371 -    args = parser.parse_args(argv)                            
+      372 -    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+      373 -                                                              
+      374 -    commit, commit_time = resolve_commit(args.latest)         
+      367 +def run(commit: str, commit_time: str) -> None:               
+      368 +    """Write the whole Step 1 report for one dataset commit.""
+          +"                                                             
+      369      official = download(config.OFFICIAL_FILE, commit)
+      370      volunteer = download(config.VOLUNTEER_FILE, commit)
+      371      snap = write_snapshot(commit, commit_time, {"official": of
+           ficial, "volunteer": volunteer})
+
+● Update(src\inspect_data.py)
+  ⎿  Added 9 lines
+      398      print(f"\nreport saved to {config.REPORTS_DIR / 'data_chec
+           k.md'}")
+      399  
+      400  
+      401 +def main(argv: list[str] | None = None) -> None:              
+      402 +    parser = argparse.ArgumentParser(description="Step 1: data
+          + verification report")                                        
+      403 +    parser.add_argument("--latest", action="store_true",      
+      404 +                        help="use the newest dataset commit in
+          +stead of the pinned one")                                     
+      405 +    args = parser.parse_args(argv)                            
+      406 +    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+      407 +    run(*resolve_commit(args.latest))                         
+      408 +                                                              
+      409 +                                                              
+      410  if __name__ == "__main__":
+      411      main()
+
+● Write(src\pipeline.py)
+  ⎿  Wrote 56 lines to src\pipeline.py
+      1 """One command for the whole pipeline.
+      2
+        fig.py
+      4     python -m src.pipeline --latest   # newest dataset commit ins
+        tead
+      6 download -> data report (Step 1) -> target -> measurement check -
+        > split -> baselines -> evaluation.
+      7 Everything it writes is in data/ (not tracked) and reports/ (trac
+      8 """
+      9 from __future__ import annotations
+     … +60 lines (ctrl+o to expand)
+
+● Write(tests\test_pipeline.py)
+  ⎿  Wrote 85 lines to tests\test_pipeline.py
+       1 """Two tests, on synthetic data only (no download):
+       2
+       3 1. an alert that crosses midnight is counted once, on the Kyiv d
+       4 2. the truncation test: the forecast for day D is the same when
+         every record from 00:00 of D onward is cut off.
+       5
+       6     python -m unittest discover -s tests
+       8 import unittest
+       9
+      10 import numpy as np
+     … +112 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The pipeline passes end to end, but the winning model on validation (ma_28)
+  actually performs 21% worse than naive on test, likely because its long
+  average lags the rising series mean. I'll add a bias column to illustrate this
+  lag and suppress the redundant check-script printout in the pipeline.
+  · summary
+
+● Update(src\evaluate.py)
+  ⎿  Added 2 lines, removed 1 line
+      20      err = pred - actual
+      21      mae = float(err.abs().mean())
+      22      return {"days": len(actual), "mean_actual": float(actual.me
+          an()), "MAE": mae,
+      23 -            "RMSE": float(np.sqrt((err ** 2).mean())), "MAE_pct
+         -_of_mean": 100 * mae / float(actual.mean())}                   
+      23 +            "RMSE": float(np.sqrt((err ** 2).mean())), "MAE_pct
+         +_of_mean": 100 * mae / float(actual.mean()),                   
+      24 +            "bias": float(err.mean())}  # forecast minus actual
+         +; negative = the forecast runs low                             
+      25  
+      26  
+      27  def score(y: pd.Series, forecasts: pd.DataFrame, split: Split) 
+          -> pd.DataFrame:
+
+● Update(src\evaluate.py)
+  ⎿  Added 4 lines, removed 1 line
+      77      scores.to_csv(config.REPORTS_DIR / "results.csv", index=Fal
+          se, encoding="utf-8")
+      78      forecasts.loc[split.val.union(split.test)].round(3).to_csv(
+          config.REPORTS_DIR / "forecasts.csv", encoding="utf-8")
+      79  
+      80 -    wide = scores.pivot(index="model", columns="split", values=
+         -["MAE", "RMSE", "MAE_pct_of_mean", "skill_vs_naive"])          
+      80 +    wide = scores.pivot(index="model", columns="split",        
+      81 +                        values=["MAE", "RMSE", "MAE_pct_of_mean
+         +", "skill_vs_naive", "bias"])                                  
+      82      table = pd.DataFrame({
+      83          "val_MAE": wide[("MAE", "validation")], "val_skill": wi
+          de[("skill_vs_naive", "validation")],
+      84 +        "val_bias": wide[("bias", "validation")],              
+      85          "test_MAE": wide[("MAE", "test")], "test_RMSE": wide[("
+          RMSE", "test")],
+      86          "test_MAE_%_of_mean": wide[("MAE_pct_of_mean", "test")]
+          , "test_skill": wide[("skill_vs_naive", "test")],
+      87 +        "test_bias": wide[("bias", "test")],                   
+      88      }).loc[forecasts.columns].round(3)
+      89      table.index = [f"{m} *" if m == chosen["best_overall"] else
+           m for m in table.index]
+      90      mean_val, mean_test = y.loc[split.val].mean(), y.loc[split.
+          test].mean()
+
+● Update(src\pipeline.py)
+  ⎿  Added 2 lines, removed 1 line
+      40            f"zero-start days: {len(stats['zero_days'])}")
+      41  
+      42      print("3/4 measurement check -> reports/volunteer_measureme
+          nt_check.md")
+      43 -    meas = check_measurement.run(volunteer, official, commit)  
+      43 +    with contextlib.redirect_stdout(io.StringIO()):            
+      44 +        meas = check_measurement.run(volunteer, official, commi
+         +t)                                                             
+      45      t = meas["test"]
+      46      print(f"    switch day {meas['switch_day']:%Y-%m-%d}; ratio
+           {t['ratio']:.3f}, rank {t['rank']} of {t['of']} "
+      47            f"-> {'JUMP' if t['jump'] else 'no jump'} at the swit
+          ch")
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● It's 18:50, so there is more time than I feared before your 20:30 cutoff.
+  Before committing I'm looking at the three new figures, since the tests can't
+  catch layout problems.
+
+  Read 3 files (ctrl+o to expand)
+
+● I found overlapping validation/test labels in the series figure and will fix
+  that; the other figures look correct, with the splitting figure confirming
+  flat regions per day and a gradual (not stepped) rise in alert starts per
+  active region-day. Next, I'll add the planned Ridge model (alpha in
+  {0.1,1,10,100}, window all-history vs. post-switch, tuned on validation only)
+  to the truncation test. · summary
+
+● Write(src\models.py)
+  ⎿  Added 52 lines, removed 5 lines
+       1 -"""Step 4: baselines. Every forecast for day D uses only days b
+         -efore D.                                                       
+       1 +"""Step 4: baselines and a Ridge model. Every forecast for day 
+         +D uses only days before D.                                     
+       2  
+       3 -forecast_all   fast, vectorised: row D is built from y[D-1], y[
+         -D-2], ... because every input is shifted first.                
+       4 -predict_next   slow reference: forecast for the day after the l
+         -ast day of the history it is given. It is written              
+       5 -               without any shifting, so the truncation test can
+         - check the fast version against it.                            
+       3 +Fast versions (used for the reported numbers)                  
+       4 +  forecast_all        baselines, vectorised: every input is shi
+         +fted before it is used, so row D never sees y[D].              
+       5 +  ridge_walk_forward  Ridge, refitted at every forecast origin 
+         +on the days before that origin.                                
+       6 +Reference versions (used by the truncation test)               
+       7 +  predict_next, ridge_predict_next                             
+       8 +                      forecast for the day after the last day o
+         +f the history they are given, rebuilt from that                
+       9 +                      history alone. If a fast version used any
+         +thing from day D or later, it would disagree.                  
+      10  """
+      11  from __future__ import annotations
+      12  
+      13  import numpy as np
+      14  import pandas as pd
+      15 +from sklearn.linear_model import Ridge                         
+      16 +from sklearn.pipeline import make_pipeline                     
+      17 +from sklearn.preprocessing import StandardScaler               
+      18  
+      19  MA_WINDOWS = (3, 7, 14, 28)
+      20  BASELINES = ("naive", "seasonal_naive_7", "seasonal_mean_4w") +
+           tuple(f"ma_{k}" for k in MA_WINDOWS)
+      21 +RIDGE_ALPHAS = (0.1, 1.0, 10.0, 100.0)                         
+      22 +RIDGE_LAGS = (1, 2, 3, 4, 5, 6, 7, 14)                         
+      23  
+      24  
+      25  def forecast_all(y: pd.Series) -> pd.DataFrame:
+     ...
+      36  
+      37  
+      38  def predict_next(history: pd.Series, model: str) -> float:
+      30 -    """Forecast for the day after `history` ends, from `history
+         -` alone."""                                                    
+      39 +    """Baseline forecast for the day after `history` ends, from
+         + `history` alone."""                                           
+      40      h = history.to_numpy(dtype="float64")
+      41      if model == "naive":
+      42          return float(h[-1])
+     ...
+      47      if model.startswith("ma_"):
+      48          return float(np.mean(h[-int(model[3:]):]))
+      49      raise ValueError(f"unknown model {model!r}")
+      50 +                                                               
+      51 +                                                               
+      52 +def make_features(y: pd.Series) -> pd.DataFrame:               
+      53 +    """Row D: y of earlier days (lags, shifted rolling means) a
+         +nd the weekday of D, a calendar fact known in advance."""      
+      54 +    prev = y.shift(1)                                          
+      55 +    cols = {f"lag_{k}": y.shift(k) for k in RIDGE_LAGS}        
+      56 +    cols["mean_7"] = prev.rolling(7).mean()                    
+      57 +    cols["mean_28"] = prev.rolling(28).mean()                  
+      58 +    X = pd.DataFrame(cols)                                     
+      59 +    for d in range(1, 7):  # Monday is the reference weekday   
+      60 +        X[f"dow_{d}"] = (y.index.dayofweek == d).astype("float6
+         +4")                                                            
+      61 +    return X                                                   
+      62 +                                                               
+      63 +                                                               
+      64 +def _fit(rows: pd.DataFrame, target: pd.Series, alpha: float): 
+      65 +    # the scaler lives inside the pipeline, so it is fitted on 
+         +the training rows only                                         
+      66 +    return make_pipeline(StandardScaler(), Ridge(alpha=alpha)).
+         +fit(rows, target)                                              
+      67 +                                                               
+      68 +                                                               
+      69 +def ridge_walk_forward(y: pd.Series, origins, alpha: float, tra
+         +in_start: pd.Timestamp) -> pd.Series:                          
+      70 +    """Forecast each origin day with a Ridge refitted on the da
+         +ys from `train_start` up to the day before it."""              
+      71 +    X = make_features(y)  # row t only contains y before t, so 
+         +building it once is safe                                       
+      72 +    out = {}                                                   
+      73 +    for day in origins:                                        
+      74 +        rows = X.loc[(X.index >= train_start) & (X.index < day)
+         +].dropna()                                                     
+      75 +        model = _fit(rows, y.loc[rows.index], alpha)           
+      76 +        out[day] = float(model.predict(X.loc[[day]])[0])       
+      77 +    return pd.Series(out, name="ridge")                        
+      78 +                                                               
+      79 +                                                               
+      80 +def ridge_predict_next(history: pd.Series, alpha: float, train_
+         +start: pd.Timestamp) -> float:                                 
+      81 +    """Reference: the same forecast built from `history` alone,
+         + with the forecast day appended as unknown."""                 
+      82 +    day = history.index[-1] + pd.Timedelta(days=1)             
+      83 +    ext = pd.concat([history, pd.Series([np.nan], index=pd.Date
+         +timeIndex([day]))])                                            
+      84 +    X = make_features(ext)                                     
+      85 +    rows = X.loc[(X.index >= train_start) & (X.index < day)].dr
+         +opna()                                                         
+      86 +    model = _fit(rows, history.loc[rows.index], alpha)         
+      87 +    return float(model.predict(X.loc[[day]])[0])               
+
+● Write(src\evaluate.py)  ⎿  Added 44 lines, removed 14 lines
+      1 -"""Step 5: walk-forward evaluation of the baselines and the choi
+        -ce made on validation.                                          
+      1 +"""Step 5: walk-forward evaluation of the baselines and Ridge, a
+        +nd the choices made on validation.                              
+      2  
+      3  One-step-ahead, walk-forward: for every day in the evaluation wi
+         ndow we act as if it were 00:00 of that day,
+      4 -use only earlier days, and record the forecast for that day; the
+        -n we move on by one day. Settings (the moving                   
+      5 -average window) are chosen on validation; the test window is onl
+        -y scored.                                                       
+      4 +use only earlier days, and record the forecast for that day; the
+        +n we move on by one day. Settings (moving-average               
+      5 +window, Ridge alpha and training window) are chosen on validatio
+        +n; the test window is only scored.                              
+      6  """
+      7  from __future__ import annotations
+      8  
+     ...
+      10  import pandas as pd
+      11  
+      12  from . import config, plotting
+      13 -from .models import forecast_all                               
+      13 +from .models import RIDGE_ALPHAS, forecast_all, ridge_walk_forw
+         +ard                                                            
+      14  from .split import Split
+      15  
+      16  
+     ...
+      35      return df
+      36  
+      37  
+      38 +def choose_ridge(y: pd.Series, split: Split, switch_day: pd.Tim
+         +estamp) -> tuple[pd.DataFrame, dict]:                          
+      39 +    """Alpha and training window (all history vs after the swit
+         +ch) by validation MAE. Test is not touched."""                 
+      40 +    windows = {"all_history": y.index.min(), "after_switch": sw
+         +itch_day}                                                      
+      41 +    rows = []                                                  
+      42 +    for alpha in RIDGE_ALPHAS:                                 
+      43 +        for name, start in windows.items():                    
+      44 +            pred = ridge_walk_forward(y, split.val, alpha, star
+         +t)                                                             
+      45 +            rows.append({"alpha": alpha, "train_window": name, 
+         +"train_start": start,                                          
+      46 +                         "val_MAE": metrics(y.loc[split.val], p
+         +red)["MAE"]})                                                  
+      47 +    grid = pd.DataFrame(rows)                                  
+      48 +    best = grid.loc[grid["val_MAE"].idxmin()]                  
+      49 +    return grid, {"alpha": float(best["alpha"]), "train_window"
+         +: best["train_window"],                                        
+      50 +                  "train_start": best["train_start"]}          
+      51 +                                                               
+      52 +                                                               
+      53  def select_on_validation(scores: pd.DataFrame) -> dict:
+      54      """The only place where a model or setting is chosen: valid
+          ation MAE."""
+      55      val = scores.loc[scores["split"] == "validation"].set_index
+          ("model")["MAE"]
+     ...
+      60      fig, (ax,) = plotting.new_figure(1, height_per_row=3.6)
+      61      ax.plot(y.index, y, color=plotting.BLUE, lw=0.6, alpha=0.45
+          , label="alert starts per day")
+      62      ax.plot(y.index, y.rolling(7).mean(), color=plotting.BLUE, 
+          lw=1.4, label="7-day mean")
+      48 -    for idx, name in ((split.val, "validation"), (split.test, "
+         -test")):                                                       
+      49 -        ax.axvspan(idx[0], idx[-1] + pd.Timedelta(days=1), colo
+         -r=plotting.GRID, alpha=0.6, lw=0)                              
+      50 -        ax.text(idx[0], 1.01, name, transform=ax.get_xaxis_tran
+         -sform(), fontsize=8, color=plotting.INK_2)                     
+      63 +    one = pd.Timedelta(days=1)                                 
+      64 +    for idx, name, ha, x in ((split.val, "validation ", "right"
+         +, split.val[0]),                                               
+      65 +                             (split.test, " test", "left", spli
+         +t.test[-1] + one)):                                            
+      66 +        ax.axvspan(idx[0], idx[-1] + one, color=plotting.GRID, 
+         +alpha=0.6, lw=0)                                               
+      67 +        ax.text(x, 1.01, name, transform=ax.get_xaxis_transform
+         +(), fontsize=8, color=plotting.INK_2, ha=ha)                   
+      68      ax.axvline(switch_day, color=plotting.INK_2, lw=0.8, ls=(0,
+           (4, 3)))
+      52 -    ax.text(switch_day, 1.01, f" official switch {switch_day:%Y
+         --%m-%d}", transform=ax.get_xaxis_transform(),                  
+      69 +    ax.text(switch_day, 1.01, f"official switch {switch_day:%Y-
+         +%m-%d} ", transform=ax.get_xaxis_transform(),                  
+      70              fontsize=8, color=plotting.INK_2, ha="right")
+      71      ax.set_ylim(bottom=0)
+      72      ax.legend(frameon=False, fontsize=8, loc="upper left")
+     ...
+      76  def plot_test(y: pd.Series, forecasts: pd.DataFrame, split: Spl
+          it, chosen: dict, path) -> None:
+      77      fig, (ax,) = plotting.new_figure(1, height_per_row=3.8)
+      78      ax.plot(split.test, y.loc[split.test], color=plotting.INK, 
+          lw=1.6, label="actual")
+      62 -    names = list(dict.fromkeys(["naive", "seasonal_naive_7", ch
+         -osen["best_overall"]]))                                        
+      79 +    names = list(dict.fromkeys(["naive", chosen["best_ma"], cho
+         +sen["best_overall"]]))                                         
+      80      for name, color in zip(names, (plotting.AQUA, plotting.ORAN
+          GE, plotting.BLUE)):
+      81          tag = " (best on validation)" if name == chosen["best_o
+          verall"] else ""
+      82          ax.plot(split.test, forecasts.loc[split.test, name], co
+          lor=color, lw=1.1, label=name + tag)
+     ...
+       88  
+       89  def run(y: pd.Series, split: Split, switch_day: pd.Timestamp, 
+           commit: str) -> dict:
+       90      forecasts = forecast_all(y)
+       91 +    grid, ridge_cfg = choose_ridge(y, split, switch_day)  # va
+          +lidation only                                                 
+       92 +    evaluated = split.val.union(split.test)                   
+       93 +    forecasts["ridge"] = ridge_walk_forward(y, evaluated, ridg
+          +e_cfg["alpha"], ridge_cfg["train_start"])                     
+       94      scores = score(y, forecasts, split)
+       95      chosen = select_on_validation(scores)  # recorded before t
+           he test numbers are read below
+       96 +                                                              
+       97      config.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+       98      scores.to_csv(config.REPORTS_DIR / "results.csv", index=Fa
+           lse, encoding="utf-8")
+       78 -    forecasts.loc[split.val.union(split.test)].round(3).to_csv
+          -(config.REPORTS_DIR / "forecasts.csv", encoding="utf-8")      
+       99 +    forecasts.loc[evaluated].round(3).to_csv(config.REPORTS_DI
+          +R / "forecasts.csv", encoding="utf-8")                        
+      100  
+      101      wide = scores.pivot(index="model", columns="split",
+      102                          values=["MAE", "RMSE", "MAE_pct_of_mea
+           n", "skill_vs_naive", "bias"])
+     ...
+      108          "test_bias": wide[("bias", "test")],
+      109      }).loc[forecasts.columns].round(3)
+      110      table.index = [f"{m} *" if m == chosen["best_overall"] els
+           e m for m in table.index]
+      111 +    shown_grid = grid.drop(columns="train_start").assign(val_M
+          +AE=grid["val_MAE"].round(3))                                  
+      112      mean_val, mean_test = y.loc[split.val].mean(), y.loc[split
+           .test].mean()
+      113      text = "\n".join([
+      114          "# Results: one-day-ahead forecasts of daily alert sta
+           rts",
+      115          "",
+      116          f"- dataset commit {commit}; {split.describe()}",
+      117          f"- mean starts per day: validation {mean_val:.1f}, te
+           st {mean_test:.1f} (the level drifts upward over time)",
+       96 -        f"- chosen on validation only: moving average window {
+          -chosen['best_ma']}; best baseline overall "                   
+       97 -        f"{chosen['best_overall']} (marked *). Test numbers we
+          -re not used for any choice.",                                 
+       98 -        "- skill = 1 - MAE / MAE of naive ('same as yesterday'
+          -); above 0 means better than naive",                          
+      118 +        f"- chosen on validation only: moving average window {
+          +chosen['best_ma']}; Ridge alpha "                             
+      119 +        f"{ridge_cfg['alpha']:g} with training window '{ridge_
+          +cfg['train_window']}' "                                       
+      120 +        f"(from {ridge_cfg['train_start']:%Y-%m-%d}); best mod
+          +el overall {chosen['best_overall']} (marked *). "             
+      121 +        "Test numbers were not used for any choice.",         
+      122 +        "- skill = 1 - MAE / MAE of naive ('same as yesterday'
+          +); above 0 means better than naive; "                         
+      123 +        "bias = mean(forecast - actual)",                     
+      124          "",
+      125          "```",
+      126          table.to_string(),
+      127          "```",
+      128          "",
+      129 +        "Ridge settings tried (validation MAE, walk-forward, r
+          +efitted at every origin):",                                   
+      130 +        "```",                                                
+      131 +        shown_grid.to_string(index=False),                    
+      132 +        "```",                                                
+      133 +        "",                                                   
+      134      ])
+      135      (config.REPORTS_DIR / "results.md").write_text(text, encod
+           ing="utf-8")
+      136      plot_series(y, split, switch_day, config.REPORTS_DIR / "fi
+           g_series_and_splits.png")
+      137      plot_test(y, forecasts, split, chosen, config.REPORTS_DIR 
+           / "fig_test.png")
+      108 -    return {"scores": scores, "table": table, "chosen": chosen
+          -, "forecasts": forecasts}                                     
+      138 +    return {"scores": scores, "table": table, "chosen": chosen
+          +, "ridge": ridge_cfg, "forecasts": forecasts}                 
+
+● Update(tests\test_pipeline.py)
+  ⎿  Added 1 line, removed 1 line
+      11  import pandas as pd
+      12  
+      13  from src import config
+      14 -from src.models import BASELINES, forecast_all, predict_next   
+      14 +from src.models import BASELINES, forecast_all, predict_next, r
+         +idge_predict_next, ridge_walk_forward                          
+      15  from src.target import daily_starts, last_complete_day
+      16  
+      17  
+
+● Update(tests\test_pipeline.py)
+  ⎿  Added 6 lines
+      78              bumped.loc[origin:] += 1000  # whatever happens on 
+          D or later must not move the forecast for D
+      79              pd.testing.assert_series_equal(forecast_all(bumped)
+          .loc[origin], full.loc[origin])
+      80              leak_caught |= abs(leaky.loc[origin] - predict_next
+          (y_cut, "ma_7")) > 1e-6
+      81 +            # the Ridge: fast walk-forward on all data vs rebui
+         +lt from the cut history, and insensitive to the future         
+      82 +            for alpha, start in ((10.0, y.index.min()), (1.0, y
+         +.index[60])):                                                  
+      83 +                fast = ridge_walk_forward(y, [origin], alpha, s
+         +tart)[origin]                                                  
+      84 +                self.assertAlmostEqual(ridge_predict_next(y_cut
+         +, alpha, start), fast, places=6,                               
+      85 +                                       msg=f"ridge for {origin:
+         +%Y-%m-%d} depends on data from that day or later")             
+      86 +                self.assertAlmostEqual(ridge_walk_forward(bumpe
+         +d, [origin], alpha, start)[origin], fast, places=6)            
+      87          self.assertTrue(leak_caught, "the check is too weak: a 
+          moving average without shift(1) passed it")
+      88  
+      89  
+
+● Update(tests\test_pipeline.py)
+  ⎿  Added 1 line, removed 1 line
+      66          full = forecast_all(y)  # the fast pipeline, run once o
+          n all data
+      67          leaky = y.rolling(7).mean()  # a 7-day mean that forgot
+           shift(1): it includes day D itself
+      68          leak_caught = False
+      69 -        for origin in y.index[40::7]:  # 00:00 Kyiv of day D is
+         - the moment the forecast is made                               
+      69 +        for origin in y.index[70::7]:  # 00:00 Kyiv of day D is
+         + the moment the forecast is made                               
+      70              cut_at = origin.tz_localize(config.TZ).tz_convert("
+          UTC")
+      71              cut = ev.loc[ev["started_at"] < cut_at]  # physical
+          ly remove every record from D onward
+      72              y_cut = daily_starts(cut, last_day=origin - pd.Time
+          delta(days=1))
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Ridge and the baselines pass tests, but neither validation winner beats "same
+  as yesterday" on test — their lagging memory undershoots as the level rose
+  from 112 to 148/day, causing 9-12 start negative bias. I'll commit this as-is
+  without tuning to the test window, then add the next-day forecast, write the
+  README, and kick off an independent audit in the background. · summary
+
+  Committed 06d87d6 (ctrl+o to expand)
+
+● Committed as 06d87d6 — the regenerated reports from Step 1 were
+  byte-identical, confirming reproducibility. Next I'll add the 2026-10-12
+  forecast using data only through 2026-10-11, then start the audit once the
+  code is stable. · summary
+
+● Update(src\evaluate.py)
+  ⎿  Added 1 line, removed 1 line
+      10  import pandas as pd
+      11  
+      12  from . import config, plotting
+      13 -from .models import RIDGE_ALPHAS, forecast_all, ridge_walk_forw
+         -ard                                                            
+      13 +from .models import BASELINES, RIDGE_ALPHAS, forecast_all, pred
+         +ict_next, ridge_predict_next, ridge_walk_forward               
+      14  from .split import Split
+      15  
+      16  
+
+● Update(src\evaluate.py)
+  ⎿  Added 15 lines
+       86                               "one-day-ahead forecasts vs actua
+           l")
+       87  
+       88  
+       89 +def write_next_day(y: pd.Series, ridge_cfg: dict, chosen: dict
+          +, commit: str) -> pd.DataFrame:                               
+       90 +    """Forecast for the day after the last complete day, made 
+          +at 00:00 of that day. Score it once that day is complete."""  
+       91 +    day = y.index[-1] + pd.Timedelta(days=1)                  
+       92 +    rows = [{"model": m, "forecast": predict_next(y, m)} for m
+          + in BASELINES]                                                
+       93 +    rows.append({"model": "ridge", "forecast": ridge_predict_n
+          +ext(y, ridge_cfg["alpha"], ridge_cfg["train_start"])})        
+       94 +    df = pd.DataFrame(rows)                                   
+       95 +    df.insert(0, "forecast_day", f"{day:%Y-%m-%d}")           
+       96 +    df["forecast"] = df["forecast"].round(2)                  
+       97 +    df["chosen_on_validation"] = df["model"].isin([chosen["bes
+          +t_overall"], chosen["best_ma"], "ridge"])                     
+       98 +    df["data_through"] = f"{y.index[-1]:%Y-%m-%d}"            
+       99 +    df["dataset_commit"] = commit                             
+      100 +    df.to_csv(config.REPORTS_DIR / f"next_day_forecast_{day:%Y
+          +-%m-%d}.csv", index=False, encoding="utf-8")                  
+      101 +    return df                                                 
+      102 +                                                              
+      103 +                                                              
+      104  def run(y: pd.Series, split: Split, switch_day: pd.Timestamp, 
+           commit: str) -> dict:
+      105      forecasts = forecast_all(y)
+      106      grid, ridge_cfg = choose_ridge(y, split, switch_day)  # va
+           lidation only
+
+● Update(src\evaluate.py)
+  ⎿  Added 3 lines, removed 1 line
+      150      (config.REPORTS_DIR / "results.md").write_text(text, encod
+           ing="utf-8")
+      151      plot_series(y, split, switch_day, config.REPORTS_DIR / "fi
+           g_series_and_splits.png")
+      152      plot_test(y, forecasts, split, chosen, config.REPORTS_DIR 
+           / "fig_test.png")
+      153 -    return {"scores": scores, "table": table, "chosen": chosen
+          -, "ridge": ridge_cfg, "forecasts": forecasts}                 
+      153 +    next_day = write_next_day(y, ridge_cfg, chosen, commit)   
+      154 +    return {"scores": scores, "table": table, "chosen": chosen
+          +, "ridge": ridge_cfg, "forecasts": forecasts,                 
+      155 +            "next_day": next_day}                             
+
+● Next-day forecast is wired in. I'm running the pipeline once more to produce
+  it and confirm nothing else changed, then I'll start the independent audit.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The next-day forecast file is saved. I'm now launching a background audit with
+  three agents: one to try to break the code with leaky variants, one to
+  recompute everything without pandas, and one to rerun from scratch and compare
+  outputs to what's committed. · summary
+
+● Workflow(Adversarial leakage audit, independent stdlib recomputation of the
+          numbers, and clean-copy reproducibility run)
+  ⎿  /workflows to view dynamic workflow runs
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● While the first cross-check wraps up, I'm drafting the README with the leakage
+  table and the three plain-language explanations tailored to the
+  alert-starts-per-day target from option A1. · summary
+
+● Write(README.md)
+  ⎿  Wrote 196 lines to README.md
+      1 # Forecasting air-raid alerts in Ukraine, one day ahead, without
+      2
+      3 KSE Agentic AI School, Stage 2. The question: how many air-raid a
+      4 known at midnight? The forecast is evaluated on the latest 8 week
+        s of data (2026-08-17 to 2026-10-11) and no information
+      6
+      7 **Headline result.** On the 56 validation days the models chosen
+      8 24-38%. On the 56 test days none of them does: the alert level ro
+        se from 112 to 148 starts a day, and models with a long
+        n the test window
+     … +313 lines (ctrl+o to expand)
+
+● Found seven loosely stated numbers in the README (e.g., "24–38%" should be
+  34–38%, and 4–5% should be 4–6%). I'll fix them all in a single script to
+  avoid conflicting edits. · summary
+
+  Made 1 scratchpad edit +27, ran 1 shell command (ctrl+o to expand)
+
+● README corrections applied; the "changed on disk" note is just my own script.
+  Committing the README and next-day forecast now, then checking the clock and
+  where the background agents are.
+
+  Committed d8b40f4 (ctrl+o to expand)
+
+● Both workflows are still working, but the first one's journal has grown, so
+  one agent may already have returned. I'm reading it now rather than waiting.
+
+  Recalled 1 memory (ctrl+o to expand)
+
+● The independent stdlib check matches my pandas results exactly—same switch
+  ratio (1.126161) and same 7/28 placebo count—and confirms the file is unsorted
+  but that's irrelevant since my code sorts explicitly. Now I'll verify the
+  label fix on the series figure took effect. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● The labels no longer collide, but validation and test share one grey band, so
+  you can't see where one ends and the other begins. I'm giving them two shades.
+
+● Update(src\evaluate.py)
+  ⎿  Added 4 lines, removed 3 lines
+      61      ax.plot(y.index, y, color=plotting.BLUE, lw=0.6, alpha=0.45
+          , label="alert starts per day")
+      62      ax.plot(y.index, y.rolling(7).mean(), color=plotting.BLUE, 
+          lw=1.4, label="7-day mean")
+      63      one = pd.Timedelta(days=1)
+      64 -    for idx, name, ha, x in ((split.val, "validation ", "right"
+         -, split.val[0]),                                               
+      65 -                             (split.test, " test", "left", spli
+         -t.test[-1] + one)):                                            
+      66 -        ax.axvspan(idx[0], idx[-1] + one, color=plotting.GRID, 
+         -alpha=0.6, lw=0)                                               
+      64 +    for idx, name, ha, x, shade, alpha in (                    
+      65 +            (split.val, "validation ", "right", split.val[0], p
+         +lotting.GRID, 0.9),                                            
+      66 +            (split.test, " test", "left", split.test[-1] + one,
+         + plotting.AXIS, 0.5)):                                         
+      67 +        ax.axvspan(idx[0], idx[-1] + one, color=shade, alpha=al
+         +pha, lw=0)                                                     
+      68          ax.text(x, 1.01, name, transform=ax.get_xaxis_transform
+          (), fontsize=8, color=plotting.INK_2, ha=ha)
+      69      ax.axvline(switch_day, color=plotting.INK_2, lw=0.8, ls=(0,
+           (4, 3)))
+      70      ax.text(switch_day, 1.01, f"official switch {switch_day:%Y-
+          %m-%d} ", transform=ax.get_xaxis_transform(),
+
+● While the audit finishes, I'm updating my project notes so the decisions you
+  made don't depend on this one conversation. The old note still says the
+  late-2025 drop was an unconfirmed hypothesis.
+
+  Wrote 2 memories (ctrl+o to expand)
+
+● Notes updated. Checking whether any audit agent has reported yet.
+  Ran 1 shell command (ctrl+o to expand)
+
+● While waiting on the audit, I'm running a second independent check: one agent
+  verifies every number, date, and path in the README against the reports and
+  code, while another plays skeptical interviewer, listing the toughest
+  questions and whether the repo already answers them. · summary
+
+● Workflow(Verify every README claim against reports and code; list the hardest
+          interview questions and whether the repo answers them)
+  ⎿  /workflows to view dynamic workflow runs
+
+● Three background checks are running. I'll wait here for them rather than end
+  the turn on a half-checked state; it's still early enough before your
+  deadline.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Dynamic workflow "Verify every README claim against reports and code; list the
+hardest interview questions and whether the repo answers them" completed · 4s
+
+● Dynamic workflow "Adversarial leakage audit, independent stdlib recomputation
+of the numbers, and clean-copy reproducibility run" completed · 5m 12s
+
+● Dynamic workflow "Independently recompute volunteer alert-splitting
+diagnostics (stdlib only) and read how the dataset builds volunteer rows"
+completed · 19m 35s
+  ⎿  You've hit your session limit · resets 10:10pm (Europe/Kyiv)
+     /upgrade to increase your usage limit.
+
+> continue
+
+● The background audit and README reviews hit the session limit and never
+  completed, leaving only the independent recomputation finished. I'll stop
+  waiting on them, lock in the current state, and redo the key checks myself.
+  · summary
+
+  Ran 1 shell command, searched memories (ctrl+o to expand)
+
+● Outputs are unchanged aside from the figure, confirming the code is
+  deterministic—I'm committing that. Since the audit agents didn't produce
+  anything usable, I'll now run the key checks myself, starting with whether
+  your two tests would catch deliberately leaky code. · summary
+
+  Made 1 scratchpad edit +74, committed 7c8cd2b (ctrl+o to expand)
+
+● Both tests successfully catch all 10 flawed versions, including future-fitted
+  scalers, forecast-day leakage, and UTC/Kyiv date mismatches. Next I'll check
+  whether validation choices shift when the test window changes, and confirm the
+  committed code reproduces cleanly without cached data. · summary
+
+  Made 1 scratchpad edit +55, ran 1 shell command (ctrl+o to expand)
+
+● All tests pass, and the clean copy matches reports byte-for-byte except
+  data_snapshot.json — I'll verify that difference is just the download
+  timestamp rather than assume it. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The run is fully reproducible—only the download timestamp differs, with
+  identical sha256 and file sizes. That timestamp shows more time has passed
+  than I thought, so I need to check the actual current time before planning
+  next steps. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● It's 22:18 Kyiv, leaving about 100 minutes; code is committed cleanly at
+  7c8cd2b. I'm relaunching the independent reviews that hit the session limit,
+  scoped to what I haven't already verified, while also adding my own checks to
+  the repo as evidence. · summary
+
+● Workflow(Independent stdlib recomputation of the numbers and an adversarial
+          read of the code for leakage or evaluation flaws not yet checked)
+  ⎿  /workflows to view dynamic workflow runs
+
+● Workflow(readme-review-wf_46f111b6-84a.js)
+  ⎿  Error: scriptPath must be a script path this tool returned, or a file you
+     can already read (the working directory or a directory you have added):
+     C:\Users\Kolya\.claude\projects\C--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\workflows\scripts\readme-revi
+     ew-wf_46f111b6-84a.js
+     A session that cannot call Read cannot load any scriptPath. Pass the whole
+     script inline through Workflow's `script` input instead.
+
+● Workflow(volunteer-measurement-crosscheck-wf_87880792-2fb.js)
+  ⎿  Error: scriptPath must be a script path this tool returned, or a file you
+     can already read (the working directory or a directory you have added):
+     C:\Users\Kolya\.claude\projects\C--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\workflows\scripts\volunteer-m
+     easurement-crosscheck-wf_87880792-2fb.js
+     A session that cannot call Read cannot load any scriptPath. Pass the whole
+     script inline through Workflow's `script` input instead.
+
+● The audit resumed, but the two previous scripts couldn't be resumed since the
+  tool lost track of their paths after the session limit hit. I'm relaunching
+  them fresh: one checking the README claims with the interviewer, and one
+  investigating how volunteer rows' provenance is built. · summary
+
+● Workflow(Verify every README claim against reports and code; list the hardest
+          interview questions and whether the repo answers them)
+  ⎿  /workflows to view dynamic workflow runs
+
+● Workflow(Read how the dataset repository builds volunteer alert rows and
+          whether that could split alerts after the switch to raion-level
+          alerts)
+  ⎿  /workflows to view dynamic workflow runs
+
+● While five independent checks run in the background, I'm adding my
+  verification scripts to the repo so the README's claims can be reproduced
+  rather than just asserted. · summary
+
+● Write(checks\mutation_check.py)
+  ⎿  Wrote 87 lines to checks\mutation_check.py
+       1 """Do the two unit tests really catch leakage?
+       2
+       3 Injects wrong or leaky code into a temporary COPY of src/ and te
+       4 `python -m unittest discover -s tests` on the copy. Every change
+          should make the tests fail.
+       5
+       6     python checks/mutation_check.py
+       8 import shutil
+       9 import subprocess
+      10 import sys
+     … +105 lines (ctrl+o to expand)
+
+● Write(checks\isolation_check.py)
+  ⎿  Wrote 69 lines to checks\isolation_check.py
+       1 """Two questions on the real data, with the settings the pipelin
+       2
+       3 1. Does anything chosen on validation depend on the test window?
+       4    and everything that is chosen on validation, and every valida
+         tion score, must stay the same.
+          everything after it is changed by +1000 and the
+       6    forecast for D must stay the same, for the baselines and for
+       7
+       8 Needs the data/ folder from `python -m src.pipeline`.
+      10     python checks/isolation_check.py
+     … +83 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Both scripts work from the repo, with the same results as before: 10 of 10
+  caught, and the isolation checks pass. Now I'm adding the README section and
+  layout entries, and committing.
+  Made 1 scratchpad edit +43, ran 1 shell command (ctrl+o to expand)
+
+● Committed as adc64c4. Now I'm waiting for the five background reviews, up to
+  about 8 minutes.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● After eight minutes none has returned. I'm checking whether they're still
+  working or have failed again.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● All five are still actively running, so while I wait I'm re-reading the README
+  end to end myself since it's what graders will actually see. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● Found two cosmetic issues in the README—a badly wrapped paragraph and an oddly
+  phrased "the user's challenge" reference. I'll fix both after the reviewers
+  report back, to avoid editing under them. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● Dynamic workflow "Read how the dataset repository builds volunteer alert rows
+and whether that could split alerts after the switch to raion-level alerts"
+completed · 11m 47s
+
+● The provenance agent returned something important, and it points to the
+  mechanism you suspected. I'm reading the full result before I touch the
+  README.
+
+  Read 1 file (ctrl+o to expand)
+
+● Found it: the dataset's state machine keys volunteer rows by oblast only, so a
+  raion-level "all clear" closes the entire oblast row until the next raion
+  alert reopens it—and this code hasn't changed since June 2024, meaning the
+  shift came from channel wording, not the parser. I'll verify this myself by
+  reading the relevant code lines before adding it to the README. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● Confirmed: the code tracks one open alert per oblast (closed by any end
+  message, no raion logic), matching the agent's claims. I'll now add a
+  reproducible merge-sensitivity script to the repo for citable numbers, and
+  cross-check the "last updated June 2024" claim against GitHub's commit
+  history. · summary
+
+  Made 1 scratchpad edit +59, ran 1 shell command (ctrl+o to expand)
+
+● My own implementation confirms the dedup pattern: grouping alerts within two
+  hours of a prior one for the same region shrinks the rise from ×2.06 to ×1.25,
+  and GitHub history shows the parser's last change was 2024-06-01. I'll now
+  write this up in the README, noting the code behavior is certain but its link
+  to the observed drift is still an inference. · summary
+
+  Made 1 scratchpad edit +95, ran 1 shell command (ctrl+o to expand)
+
+● Still on it: the measurement section is committed (18b9d79), tests pass, and
+  one of the two audit agents has reported. I'm reading its result now.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● My independent recomputation confirms all 1,690 daily values and 14 baseline
+  metrics match, but surfaced four small wording errors in the README (test
+  percentage, Thursday's mean, growth multiplier, and regional plateau timing)
+  plus a missing limitation about Zakarpatska's alert gap since 2026-07-30 — I'm
+  fixing all of these now. · summary
+
+  Made 1 scratchpad edit +37, ran 1 shell command (ctrl+o to expand)
+
+● The commit failed because PowerShell mangled the double quotes in my message,
+  though the files are saved fine. I'll retry by reading the commit message from
+  a file instead. · summary
+
+  Made 1 scratchpad edit +10, committed 1a4c10e (ctrl+o to expand)
+
+● One of the two README reviewers has reported. Reading it.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● It reported 233 claims checked; the first two findings are the ones I just
+  fixed. Pulling out the rest compactly.
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● I'll apply the review's fair findings: correcting the "order reverses" claim,
+  dropping the untested causal claim, softening overstated phrasing, and
+  tightening the plain-language explanations to three sentences each. First I'll
+  re-read the current README to ensure my edits match its exact text. · summary
+
+  Read 1 file (ctrl+o to expand)
+
+● I'll verify the reviewer's 30-day averages against the report's daily CSV
+  before adding them to the README, and check the size of the stdlib
+  recomputation script since it's cited there but missing from the repo.
+  · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+
+● The 30-day averages check out against the reviewer's figures, so I'll leave
+  the unreviewed 366-line script out and just soften the README's claim about
+  it. Applying that README correction now. · summary
+
+  Made 1 scratchpad edit +150, ran 1 shell command (ctrl+o to expand)
+
+● All 24 corrections applied cleanly. Committing them, then checking the two
+  reviewers still outstanding.
+
+  Made 1 scratchpad edit +13, ran 1 shell command (ctrl+o to expand)
+
+● Changes are committed as 28726cd. The adversarial code review and sceptical
+  interviewer checks are still running, so I'll wait a bit longer since the
+  interviewer's questions should help with your defence. · summary
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
+
+● Changes are committed as 28726cd. The adversarial code review and sceptical
+  interviewer checks are still running, so I'll wait a bit longer since the
+  interviewer's questions should help with your defence. · summary
+> /compact
+  ⎿  Compacted
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg2.txt
+     (13 lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme5.py
+     (150 lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg.txt (10
+     lines)
+  ⎿  Referenced file README.md
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme4.py (37
+     lines)
+  ⎿  Plan file referenced
+     (~\.claude\plans\pasted-content-id-89c9-hi-i-m-shimmying-crown.md)
+  ⎿  Skills restored (workflow-authoring, dataviz)
+  ⎿  Compacted
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg2.txt
+     (13 lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme5.py
+     (150 lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg.txt (10
+     lines)
+  ⎿  Referenced file README.md
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme4.py (37
+     lines)
+  ⎿  Plan file referenced
+     (~\.claude\plans\pasted-content-id-89c9-hi-i-m-shimmying-crown.md)
+  ⎿  Skills restored (workflow-authoring, dataviz)
+
+> /compact
+  ⎿  Compacted
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg2.txt
+     (13 lines)
+  ⎿  Referenced file README.md
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme5.py
+     (150 lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\commit_msg.txt (10
+     lines)
+  ⎿  Read
+     ..\..\AppData\Local\Temp\claude\c--Users-Kolya-projects-AI-Agentic-School-D
+     omanskyi\a496c0ec-cf37-4951-9a5d-620929c1f4fc\scratchpad\fix_readme4.py (37
+     lines)
+  ⎿  Plan file referenced
+     (~\.claude\plans\pasted-content-id-89c9-hi-i-m-shimmying-crown.md)
+
+> /compact
+  ⎿  Not enough messages to compact.
+
+● Dynamic workflow "Verify every README claim against reports and code; list the
+hardest interview questions and whether the repo answers them" completed · 30m
+39s
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Interrupted · What should Claude do instead?
